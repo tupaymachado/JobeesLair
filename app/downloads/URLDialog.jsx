@@ -3,7 +3,8 @@
 // MODIFIED (0.5.4): the PS5's own keyboard opens with the dialog (state/system-keyboard.js), where a link or a key
 // is typed (or pasted) the way the player types everywhere else; Go submits it. Backing out of it closes the
 // dialog. A link the dialog refuses comes back with its reason and "Type it again". The keys below stay for a
-// console where it does not open. `kind` "key" (an API key) types plain Latin text instead of a link.
+// console where it does not open. `kind` "key" (an API key) types plain Latin text instead of a link; "links"
+// takes several links at once (Downloads → Add links), up to `maxLength` characters.
 // While it is open, the phone companion may answer it (state/phone-typing.js): the PS5 keyboard closes and the phone's
 // text goes in as if typed here; a refusal shows here and on the phone.
 
@@ -20,7 +21,7 @@ import { FocusScope, Text, View } from '@ps5-react/core';
 import { colors, radius } from '../ui/colors.js';
 
   var MAX_TYPED = 2048;
-  function URLDialog({ title, detail: detail2, initial = "https://", submit, onClose, kind = "url" }) {
+  function URLDialog({ title, detail: detail2, initial = "https://", submit, onClose, kind = "url", maxLength = MAX_TYPED }) {
     const t2 = useT();
     const [value, setValue] = (0, useState)(initial);
     const [error2, setError] = (0, useState)("");
@@ -46,7 +47,7 @@ import { colors, radius } from '../ui/colors.js';
       return latest.current(typed);
     } }), []);
     const typeOnConsole = (from = value) => {
-      void typeOnSystemKeyboard({ title, text: from, maxLength: MAX_TYPED, type: kind === "key" ? "basic" : "url", enter: "go" }).then((result) => {
+      void typeOnSystemKeyboard({ title, text: from, maxLength, type: kind === "key" ? "basic" : "url", enter: "go" }).then((result) => {
         if (!result) return;
         // The phone answered while it was up: that answer stands.
         if (result.status === "phone") return;

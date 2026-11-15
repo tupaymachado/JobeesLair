@@ -22,6 +22,7 @@ import { deviceFacts } from './device.js';
 import { OLD_TITLE_ID } from './title-migration.js';
 import { TITLE_ID } from '../version.js';
 import { autoContinueParts } from './auto-continue.js';
+import { freeVolumesWhileExtracting } from './free-volumes.js';
 import { online } from './online.js';
 import { Archives, BrowserCapture, DeviceInfo, DownloadFormats, Downloads, FileSystem, Http, Linking, Notifications, Packages, Platform, Power } from '@ps5-react/core';
 
@@ -66,6 +67,7 @@ import { Archives, BrowserCapture, DeviceInfo, DownloadFormats, Downloads, FileS
     firmware: () => deviceFacts().firmware,
     playtime,
     autoContinue: autoContinueParts,
+    freeVolumes: freeVolumesWhileExtracting,
     // 0.5.4: each launch learned goes to the players' numbers (state/online.js; only with stats on).
     onLaunch: (title, report) => !OWN_TITLES.includes(title) && online().launched({ title, ...report })
   }));

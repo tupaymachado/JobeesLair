@@ -111,6 +111,15 @@ app.
 3. Finished games install through ShadowMount+, which waits until no game is open: **close Jobee'sLair** to
    let it finish.
 
+**Your own links:** on the **Downloads** page select **Add links** and enter one link or several (easiest from
+the phone companion, which shows the same box). The parts of one archive (`.part1.rar`, `.r00`, `.7z.001`) are
+put together as one download; host pages whose names say nothing ask whether they are the parts of one file or
+separate downloads. Downloads in parts go to the drive the last download used.
+
+**Downloads in parts:** a RAR set is unpacked while its later parts download, and with **Settings → Downloads →
+Free space while extracting** (on by default) each part is deleted once unpacked, so the drive needs room for
+the game and one part. Pausing it or closing the app before it finishes downloads the deleted parts again.
+
 The DualSense light shows the queue: slow breath = idle, green = downloading, amber = paused, red = failed
 (turn it off under **Settings → Look & feel**).
 

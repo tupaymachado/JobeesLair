@@ -165,6 +165,9 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
     // itself (state/auto-continue.js, Settings), after AUTO_OPEN_MS with a countdown on its card.
     autoContinue = () => false,
     autoOpenMs = 10e3,
+    // Whether a RAR set extracted while it downloads deletes each part once it is read (state/free-volumes.js,
+    // Settings): the drive then holds the game and one part more, not the whole set beside it.
+    freeVolumes = () => false,
     // 0.5.4: told each launch learned from ShadowMount's log, (title, {outcome, verdict, format, fixed, backport}),
     // for the players' numbers (state/online.js launched).
     onLaunch = () => {},
@@ -1266,6 +1269,9 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
           off();
           if (noRoom) throw new Error(noRoom);
           if (outcome.error && (job2.state === "pausing" || job2.cancelling)) throw outcome.error;
+          // Parts it deleted are gone: no second attempt on the whole set until they are downloaded again.
+          const freed = job2.parts?.filter((part) => part.freed).length ?? 0;
+          if (outcome.error && freed) throw new Error(`${outcome.error.message} ${t("downloads.freedParts", { count: freed })}`);
           // A password the stream couldn't use gets the known ones below, once every volume is here.
           if (outcome.error && !STREAM_FAILURE.test(cause(outcome.error.message)) && !PASSWORD_FAILURE.test(cause(outcome.error.message))) throw outcome.error;
           if (outcome.error) {
@@ -1430,7 +1436,7 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
         const options = extraction(job2, job2.parts.map((part) => part.destination));
         if (fs.exists(options.destination)) return null;
         change();
-        task = archives.extract({ ...options, stream: true });
+        task = archives.extract({ ...options, stream: true, freeVolumes: freesParts(job2) });
       } catch (error2) {
         console.log("[download-queue] extraction during download not started:", error2.message);
         return null;
@@ -1438,9 +1444,41 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
       const streamed = { task, written: 0 };
       const off = task.subscribe((progress) => {
         streamed.written = progress.written || 0;
+        partsFreed(job2, progress.freed);
       });
       streamed.done = task.done.then((result) => ({ result }), (error2) => ({ error: error2 })).finally(off);
       return streamed;
+    }
+    // Parts deleted as they were extracted (freeVolumes): the engine counts them from the first, and they are
+    // marked so the set downloads past them, its space check counts them gone, and a later run (the extraction
+    // was stopped: paused, the app closed, a damaged part) downloads them again before it extracts once more.
+    const freesParts = (job2) => Boolean(archives?.freesVolumes && freeVolumes() && job2.parts?.length > 1);
+    function partsFreed(job2, count) {
+      if (!job2.parts || !(count > 0)) return;
+      let marked = 0;
+      for (const part of job2.parts.slice(0, count)) {
+        if (part.freed || !part.completed) continue;
+        part.freed = true;
+        marked++;
+      }
+      if (!marked) return;
+      console.log(`[download-queue] ${job2.id}: ${count} of ${job2.parts.length} parts extracted and deleted to save space`);
+      change();
+    }
+    // A set whose parts were deleted can only be extracted again once they are downloaded again.
+    function forgetFreedParts(job2) {
+      const freed = job2.parts?.filter((part) => part.freed) ?? [];
+      if (!freed.length) return 0;
+      for (const part of freed) {
+        part.freed = false;
+        part.completed = false;
+        part.written = 0;
+        delete part.options;
+      }
+      job2.written = job2.parts.reduce((sum, part) => sum + part.written, 0);
+      console.log(`[download-queue] ${job2.id}: ${freed.length} part(s) deleted after extraction are downloaded again, as the extraction starts over`);
+      change();
+      return freed.length;
     }
     const setDirectory = (job2) => `${job2.root}/downloads/sets/${job2.release.filename}`;
     // 0.5.4: a "set" whose first part is a whole disk image lists images, not an archive's volumes: one catalog numbers
@@ -1466,10 +1504,17 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
       await fs.removeAsync(setDirectory(job2)).catch((error2) => console.log("[download-queue] set folder not deleted:", error2.message));
       notifications.show(t("downloads.notice.complete"), job2.title);
     }
-    function setNeed(job2, extracted = 0) {
+    function setNeed(job2, extracted = 0, freeing = false) {
       const sizes = job2.parts.map((item) => item.total ?? item.options?.expectedBytes ?? null);
       const largest = Math.max(0, ...sizes.filter(Boolean));
       const size = (index) => sizes[index] ?? largest;
+      // Parts deleted once extracted: the drive holds at most the extraction (about the set's size) and one part
+      // more, less what is on it already, the parts still there and the files extracted so far.
+      if (freeing) {
+        const whole = job2.parts.reduce((sum, item, index) => sum + size(index), 0);
+        const held = job2.parts.reduce((sum, item, index) => sum + (item.freed ? 0 : item.completed ? size(index) : item.written || 0), 0);
+        return Math.max(0, whole + largest - held - extracted);
+      }
       return Math.max(0, job2.parts.reduce((sum, item, index) => sum + size(index) + (item.completed ? 0 : Math.max(0, size(index) - item.written)), 0) - extracted);
     }
     function ownedPaths(job2) {
@@ -1512,6 +1557,8 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
         written: 0,
         completed: false
       })));
+      // No extraction runs before this one starts: parts it deleted earlier are downloaded again.
+      forgetFreedParts(job2);
       let streamed = null;
       try {
         for (let index = 0; index < job2.parts.length; index++) {
@@ -1519,7 +1566,7 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
           job2.partIndex = index;
           const part = job2.parts[index];
           if (job2.state === "pausing") return;
-          if (part.completed && fs.exists(part.destination)) continue;
+          if (part.completed && (part.freed || fs.exists(part.destination))) continue;
           if (part.completed) {
             part.completed = false;
             part.written = 0;
@@ -1559,7 +1606,10 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
           }
           if (job2.state === "pausing") return;
           storageIdentity(job2);
-          if (!fs.exists(part.destination) && fs.diskUsage(job2.root).free < setNeed(job2, streamed?.written) + MARGIN2)
+          // Before the first part is read the set is taken for one extracted as it downloads (a RAR set); a set
+          // that turns out to be another kind is checked in full from the second part on.
+          const freeing = freesParts(job2) && (Boolean(streamed) || index === 0);
+          if (!fs.exists(part.destination) && fs.diskUsage(job2.root).free < setNeed(job2, streamed?.written, freeing) + MARGIN2)
             throw new Error("Not enough space for the remaining volumes and their extraction. Free space and resume.");
           active2.transferring = true;
           const task = downloads.enqueue({
@@ -1640,7 +1690,7 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
     }
     function lostPartial(job2) {
       const kept = (path) => fs.exists(path) || fs.exists(`${path}.part`);
-      if (job2.parts) return job2.parts.some((part) => (part.written || part.completed) && !kept(part.destination));
+      if (job2.parts) return job2.parts.some((part) => (part.written || part.completed) && !part.freed && !kept(part.destination));
       return job2.written > 0 && !kept(job2.downloadDestination || job2.artifact.destination);
     }
     function holding(root2) {

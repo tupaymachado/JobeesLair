@@ -51,7 +51,10 @@ const fakes = {
   '/downloads/useQueue.js': `
 export const useJobs = () => ({ jobs: globalThis.__fake.jobs });
 export const fractionOf = (job) => job?.total ? job.written / job.total : 0;
-export const useQueue = () => ({ jobs: globalThis.__fake.jobs });`,
+export const useQueue = () => ({ jobs: globalThis.__fake.jobs });
+export const subscribe2 = (listener) => (listener(globalThis.__fake.jobs), () => {});
+export const useProgress = () => null;
+export const shapeOf = (job) => job;`,
   '/state/drives.js': `
 export const useDrives = () => globalThis.__fake.drives;
 export const refreshDrives = async () => {};

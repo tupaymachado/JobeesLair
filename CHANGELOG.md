@@ -4,6 +4,22 @@ What changed in each version of Jobee'sLair. Each release on
 [GitHub](https://github.com/JVK3R/JobeesLair/releases) carries the full notes, the files and their
 SHA-256 checksums.
 
+## Unreleased
+
+- **Download from your own links.** **Downloads → Add links** takes one link or a whole list (typed on the
+  console, or pasted on the phone companion's box): direct files, host pages and magnet links, through TorBox or
+  AllDebrid when your key is set and the service takes them. Links whose names number them as the volumes of one
+  archive (`.part1.rar`, `.part2.rar`; `.rar`, `.r00`, `.r01`; `.7z.001`, `.7z.002`) become one download in parts,
+  in volume order whatever order they were pasted in; a set missing a part says which. Several host pages whose
+  names say nothing ask whether they are the parts of one file, in the order pasted, or separate downloads.
+- **RAR downloads in parts take half the room.** A RAR set already unpacked while its later parts downloaded;
+  now each part is also deleted as soon as it is unpacked (**Settings → Downloads → Free space while
+  extracting**, on by default). The drive needs room for the game and one part, not the whole set beside the
+  game: a 60 GB game in 2 GB parts needs about 62 GB instead of 120 GB. Nothing is deleted while a wrong
+  password could still turn up, so the other known passwords are still tried on the whole set. The deleted parts
+  are downloaded again when the extraction has to start over: the download paused or the app closed before it
+  finished, or a damaged part found after earlier ones were deleted.
+
 ## 0.5.7 (2026-11-08)
 
 - **The store's catalog comes in a new format.** New games keep reaching the store between releases. 0.5.6 and

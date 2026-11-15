@@ -19,6 +19,7 @@ const { shelfEntries } = await load('app/library/shelf.js');
 const { scanDrive } = await load('app/files/scan.js');
 const { busyWhileOpen, shadowRequest } = await load('app/state/shadowmount.js');
 const { DownloadFormats } = await load('ps5-react/runtime/js/download-formats.js');
+const { parseLinks, pastedDownloads, planLinks } = await load('app/state/pasted-links.js');
 const en = JSON.parse(readFileSync(path.join(repo, 'app/i18n/locales/en.json'), 'utf8'));
 configure(() => en, en);
 
@@ -160,12 +161,12 @@ function shadowMount(state) {
   };
 }
 
-function queueWith({ fs, downloads, archives, http, firmware, packages = null, onLaunch }) {
+function queueWith({ fs, downloads, archives, http, firmware, packages = null, onLaunch, freeVolumes }) {
   return createDownloadQueue({
     fs, downloads, http: http ?? shadowMount({ images: [], games: {} }), formats: DownloadFormats, dataDir: '/data/app', platform: 'ps5',
     notifications: { show() {} }, power: { keepAwake() {} }, linking: null,
     sources: { resolve: async (release) => ({ url: release.url }) }, archives, packages, wait: async () => {},
-    firmware: firmware ?? (() => '13.60'), onLaunch,
+    firmware: firmware ?? (() => '13.60'), onLaunch, freeVolumes,
   });
 }
 
@@ -696,6 +697,138 @@ test('a complete split set extracts and tracks its image', async () => {
   const job = await settle(queue, id);
   assert.equal(job.state, 'downloaded', job.error);
   assert.deepEqual(job.artifact.images, ['/data/homebrew/Game.exfat']);
+});
+
+// A RAR set extracted while it downloads, as the RAR worker does it: each later volume is read once it is
+// there, and with `freeVolumes` the one before it is deleted then and counted in `freed`. `failAt`: the
+// extraction fails (a damaged volume) once it has read that many volumes. `seen` records which parts were on the
+// drive each time a volume was read, `calls` every request.
+function rarStreamer(fs, files, state = {}) {
+  const calls = [];
+  const seen = [];
+  const base = extractor(fs, files);
+  return {
+    calls, seen,
+    streams: true,
+    freesVolumes: true,
+    inspect: ([p]) => ({ kind: /part-\d+\.bin(\.part)?$/.test(p) ? 'rar' : null }),
+    extract(options) {
+      calls.push(options);
+      if (!options.stream) return base.extract(options);
+      const listeners = new Set();
+      let cancelled = false;
+      let freed = 0;
+      const tick = () => new Promise((resolve) => setImmediate(resolve));
+      const done = (async () => {
+        for (let read = 1; read < options.sources.length; read++) {
+          while (!fs.exists(options.sources[read])) {
+            if (cancelled) throw new Error('Extraction cancelled; downloaded parts are preserved.');
+            await tick();
+          }
+          seen.push(options.sources.map((path) => fs.exists(path)));
+          if (state.failAt && read >= state.failAt) throw new Error('RAR checksum mismatch; the archive is damaged.');
+          if (options.freeVolumes) {
+            fs.remove(options.sources[read - 1]);
+            freed = read;
+          }
+          for (const listener of listeners) listener({ written: read * 10, freed });
+        }
+        return await base.extract(options).done;
+      })();
+      done.catch(() => {});
+      return { subscribe: (listener) => (listeners.add(listener), () => listeners.delete(listener)), done, cancel: () => { cancelled = true; } };
+    },
+  };
+}
+const rarSet = (count, sizeBytes = 100) => ({ id: 'set', provider: 'host', filename: 'Game', parts: Array.from({ length: count }, (_, i) => ({ number: i + 1, sources: [{ url: `https://example.com/Game.part${i + 1}.rar`, sizeBytes }] })) });
+
+test('free volumes: a RAR set extracted while it downloads deletes each part once read, never holding two behind', async () => {
+  const fs = memoryFs();
+  const archives = rarStreamer(fs, { 'Game.exfat': 400 });
+  const downloads = engine(fs);
+  const queue = queueWith({ fs, downloads, archives, freeVolumes: () => true });
+  const job = await settle(queue, queue.enqueue(game, rarSet(4), '/data'));
+  assert.equal(job.state, 'downloaded', job.error);
+  assert.deepEqual(job.artifact.images, ['/data/homebrew/Game.exfat']);
+  assert.equal(archives.calls[0].freeVolumes, true);
+  // When volume n is read, the ones before n-1 are gone already.
+  for (const [at, present] of archives.seen.entries()) assert.deepEqual(present.slice(0, at), Array(at).fill(false), `read ${at + 1}: ${present}`);
+  assert.equal(downloads.requests.length, 4, 'no part is downloaded twice');
+  assert.ok(!fs.exists('/data/downloads/sets/Game'));
+});
+
+test('free volumes: off in Settings, or a host without it, every part stays until the set is extracted', async () => {
+  for (const [freeVolumes, freesVolumes] of [[() => false, true], [() => true, false]]) {
+    const fs = memoryFs();
+    const archives = { ...rarStreamer(fs, { 'Game.exfat': 400 }), freesVolumes };
+    const queue = queueWith({ fs, downloads: engine(fs), archives, freeVolumes });
+    const job = await settle(queue, queue.enqueue(game, rarSet(3), '/data'));
+    assert.equal(job.state, 'downloaded', job.error);
+    assert.equal(archives.calls[0].freeVolumes, false);
+    assert.ok(archives.seen.every((present) => present.slice(0, -1).every(Boolean)), 'nothing deleted while extracting');
+  }
+});
+
+test('free volumes: an extraction that fails after deleting parts says so, and a retry downloads them again', async () => {
+  const fs = memoryFs();
+  // Volume 3 is damaged the first time: the extraction fails once it reads it, parts 1 and 2 deleted by then.
+  const state = { failAt: 3 };
+  const archives = rarStreamer(fs, { 'Game.exfat': 400 }, state);
+  const downloads = engine(fs);
+  const queue = queueWith({ fs, downloads, archives, freeVolumes: () => true });
+  const id = queue.enqueue(game, rarSet(4), '/data');
+  let job = await settle(queue, id);
+  assert.equal(job.state, 'failed');
+  assert.match(job.error, /checksum mismatch/);
+  assert.match(job.error, /2 parts were deleted after they were extracted/);
+  assert.deepEqual(job.parts.map((part) => Boolean(part.freed)), [true, true, false, false]);
+  assert.equal(downloads.requests.length, 4);
+  state.failAt = null;
+  queue.resume(id);
+  job = await settle(queue, id);
+  assert.equal(job.state, 'downloaded', job.error);
+  assert.deepEqual(downloads.requests.slice(4).map((request) => request.url), ['https://example.com/Game.part1.rar', 'https://example.com/Game.part2.rar'], 'only the deleted parts again');
+});
+
+test('free volumes: a set fits in the extraction and one part more, not twice the set', async () => {
+  const MiB = 1024 ** 2;
+  const sized = (free, freeVolumes) => {
+    const fs = memoryFs();
+    fs.diskUsage = () => ({ total: 1e12, free });
+    const queue = queueWith({ fs, downloads: engine(fs), archives: rarStreamer(fs, { 'Game.exfat': 400 * MiB }), freeVolumes: () => freeVolumes });
+    return settle(queue, queue.enqueue(game, rarSet(4, 100 * MiB), '/data'));
+  };
+  // 400 MiB of parts: 500 MiB (and the margin) is room enough when parts go as they are read, not 800 MiB.
+  const room = 500 * MiB + 17 * MiB;
+  assert.equal((await sized(room, true)).state, 'downloaded');
+  const strict = await sized(room, false);
+  assert.equal(strict.state, 'failed');
+  assert.match(strict.error, /Not enough space for the remaining volumes/);
+});
+
+test('pasted links: host pages taken as the parts of one file download as one set, extracted as it downloads', async () => {
+  const fs = memoryFs();
+  const archives = rarStreamer(fs, { 'Game.exfat': 400 });
+  const downloads = engine(fs);
+  const queue = queueWith({ fs, downloads, archives, freeVolumes: () => true });
+  const links = parseLinks('https://host.example/f/aaa https://host.example/f/bbb https://host.example/f/ccc');
+  const [{ game, release }] = pastedDownloads(planLinks(links), { looseAs: 'set' });
+  const job = await settle(queue, queue.enqueue(game, release, '/data'));
+  assert.equal(job.state, 'downloaded', job.error);
+  assert.deepEqual(downloads.requests.map((request) => request.url), links, 'in the order pasted');
+  assert.deepEqual(job.artifact.images, ['/data/homebrew/Game.exfat']);
+  assert.equal(archives.calls[0].freeVolumes, true);
+});
+
+test('pasted links: a link whose name has no extension downloads as a file, and the same paste twice is one job', async () => {
+  const fs = memoryFs();
+  const queue = queueWith({ fs, downloads: engine(fs), archives: extractor(fs, {}) });
+  const [{ game, release }] = pastedDownloads(planLinks(parseLinks('https://host.example/f/aaa')));
+  const id = queue.enqueue(game, release, '/data');
+  assert.equal(queue.enqueue(game, release, '/data'), id);
+  const job = await settle(queue, id);
+  assert.equal(job.state, 'file-downloaded', job.error);
+  assert.equal(job.artifact.destination, '/data/downloads/files/aaa');
 });
 
 test('a set whose first part is a whole image is that image: placed in homebrew/, the other parts never downloaded (0.5.4)', async () => {

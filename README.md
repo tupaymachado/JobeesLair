@@ -65,7 +65,10 @@ or disappear: anyone can read, build, fix and fork it.
   whether it runs on firmware 13.60 (**13.60 Ready**), and whether its link still works (**Broken link**,
   **Offline**). A link that stops working for other players is flagged for you too. Nothing is hidden, only ranked.
 - **Downloads that look after themselves:** a download that fails part-way retries by itself, and archives
-  are unpacked for you, even an archive inside an archive.
+  are unpacked for you, even an archive inside an archive. A RAR in parts is unpacked while it downloads,
+  deleting each part once unpacked, so the drive needs room for the game and one part, not twice the game.
+- **Your own links:** paste one link or a list in Downloads → Add links (from the phone is easiest); the parts of
+  one archive become one download.
 - **Catches file links from the console's browser** for you, so there is no typing links with a
   controller, and **learns which hosts work** on your console (**Auto-capture** / **Rarely works here**).
 - **TorBox and AllDebrid (optional):** add your key in Settings and supported hosts download at full speed

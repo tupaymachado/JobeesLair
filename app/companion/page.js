@@ -485,9 +485,10 @@ a.btn{text-decoration:none}
     $("askDetail").textContent = asking.detail || ""; $("askDetail").hidden = !asking.detail;
     var input = $("askText");
     input.value = ""; $("askError").textContent = "";
+    // "links" (Downloads → Add links): several links in one box, which a url field would refuse.
     input.type = asking.kind === "url" ? "url" : asking.kind === "search" ? "search" : "text";
-    input.setAttribute("inputmode", asking.kind === "url" ? "url" : "text");
-    input.placeholder = asking.kind === "url" ? "https://…" : s("phone.typing.placeholder");
+    input.setAttribute("inputmode", asking.kind === "url" || asking.kind === "links" ? "url" : "text");
+    input.placeholder = asking.kind === "url" ? "https://…" : asking.kind === "links" ? "https://… https://…" : s("phone.typing.placeholder");
     if (!was) { buzz(); window.scrollTo(0, 0); }
   }
   function loadAsking() { return api("GET", "/api/typing").then(function (d) { renderAsking(d.asking); }).catch(function () {}); }

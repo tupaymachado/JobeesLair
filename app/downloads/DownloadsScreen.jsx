@@ -2,7 +2,8 @@
 // Top to bottom: the page title with the queue's state in words and the last action's error; the
 // telemetry band (Telemetry.jsx: live throughput, overall progress, counts, drive space); then the jobs as
 // square-edged cards, two to a row, grouped In progress / On hold / Finished. Square pauses or resumes the
-// focused card, Triangle opens its game; cancelling a card moves focus to its neighbor.
+// focused card, Triangle opens its game; cancelling a card moves focus to its neighbor. "Add links" downloads
+// links the player pastes, outside the catalog (state/pasted-links.js).
 // The queue's actions, their order and their error handling are the same as before; only the look changed.
 
 import '../assets/Exo2.ttf';
@@ -11,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CARD_WIDTH, DownloadCard, primaryKey } from './DownloadCard.jsx';
 import { Telemetry } from './Telemetry.jsx';
 import { DiagnosisSheet } from '../game/DiagnosisSheet.jsx';
+import { URLDialog } from './URLDialog.jsx';
 import { finalError } from './errors.js';
 import { useJobs } from './useQueue.js';
 import { formatNumber2, t } from '../i18n/core.js';
@@ -18,7 +20,10 @@ import { SPAN_MAX, fitBytes } from '../i18n/fit.js';
 import { useT } from '../i18n/index.js';
 import { getGame } from '../state/catalog.js';
 import { BUSY, COMPLETE } from '../state/download-queue.js';
-import { downloadQueue } from '../state/downloads.js';
+import { downloadQueue, freeBytes, storageRoots } from '../state/downloads.js';
+import { debridSource, debridSupports } from '../state/debrid.js';
+import { rememberDrive, startingDrive } from '../state/last-drive.js';
+import { parseLinks, pastedDownloads, planLinks } from '../state/pasted-links.js';
 import { useNavActions } from '../state/nav.jsx';
 import { Button2 } from '../ui/Button.jsx';
 import { ButtonHints } from '../ui/ButtonHints.jsx';
@@ -36,12 +41,32 @@ import { AnimatePresence, FocusScope, ScrollView, Text, View } from '@ps5-react/
   ];
   var EMPTY_HINTS = [HINT.select, HINT.back];
   var EMPTY_KEY = "downloads:empty";
+  var LINKS_KEY = "downloads:add-links";
+  // Room for a list of links typed on the phone (state/phone-typing.js takes as much).
+  var LINKS_TEXT = 8192;
+  // Several links whose names don't say what they are: the parts of one file, in the order pasted, or a
+  // download each. Circle goes back to the links.
+  function LinksChoice({ count, onChoose, onClose }) {
+    const t2 = useT();
+    return /* @__PURE__ */ (0, jsx)(FocusScope, { trap: true, autoFocus: true, onBack: () => {
+      onClose();
+      return true;
+    }, children: /* @__PURE__ */ (0, jsx)(View, { style: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 50, alignItems: "center", justifyContent: "center", backgroundColor: `${colors.canvas}f2` }, children: /* @__PURE__ */ (0, jsxs)(View, { style: { width: 1100, gap: 30, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, padding: 48 }, children: [
+      /* @__PURE__ */ (0, jsx)(Text, { style: { fontFamily: "Exo2", fontSize: 36, color: colors.fg, lineHeight: 48 }, children: t2("downloads.links.choiceTitle", { count }) }),
+      /* @__PURE__ */ (0, jsx)(Text, { style: { width: 1000, fontFamily: "Exo2", fontSize: 24, color: colors.muted, numberOfLines: 4, ellipsizeMode: "tail", lineHeight: 36 }, children: t2("downloads.links.choiceDetail") }),
+      /* @__PURE__ */ (0, jsxs)(View, { style: { flexDirection: "row", gap: 24 }, children: [
+        /* @__PURE__ */ (0, jsx)(Button2, { label: t2("downloads.links.asParts"), icon: "layers", autoFocus: true, onPress: () => onChoose("set") }),
+        /* @__PURE__ */ (0, jsx)(Button2, { label: t2("downloads.links.asEach"), icon: "list", variant: "secondary", onPress: () => onChoose("each") }),
+        /* @__PURE__ */ (0, jsx)(Button2, { label: t2("urlDialog.cancel"), variant: "outline", onPress: onClose })
+      ] })
+    ] }) }) });
+  }
   var PER_ROW = 2, GAP = 24;
   var ARM_MS = 3e3;
   // 0.5.1: the whole list at once, at its top (0.5.3: beside the library band). "Clear finished" tidies every
   // finished card away; "Cancel all" stops and removes every download that is not finished, on a second press
   // within three seconds (the first arms it, like a card's X).
-  function QueueActions({ finished, unfinished, run }) {
+  function QueueActions({ finished, unfinished, run, onAddLinks }) {
     const t2 = useT();
     const [armed, setArmed] = (0, useState)(false);
     (0, useEffect)(() => {
@@ -50,6 +75,7 @@ import { AnimatePresence, FocusScope, ScrollView, Text, View } from '@ps5-react/
       return () => clearTimeout(timer);
     }, [armed]);
     return /* @__PURE__ */ (0, jsxs)(View, { style: { flexDirection: "row", justifyContent: "flex-end", gap: 12 }, children: [
+      /* @__PURE__ */ (0, jsx)(Button2, { variant: "secondary", size: "md", icon: "external", label: t2("downloads.links.add"), focusKey: LINKS_KEY, onPress: onAddLinks }),
       finished ? /* @__PURE__ */ (0, jsx)(Button2, { variant: "secondary", size: "md", icon: "check", label: t2("downloads.clearFinished"), focusKey: "downloads:clear-finished", onPress: () => run("clearFinished") }) : null,
       unfinished ? /* @__PURE__ */ (0, jsx)(Button2, { variant: armed ? "primary" : "secondary", size: "md", icon: armed ? "delete" : "x", label: t2(armed ? "downloads.cancelAllArmed" : "downloads.cancelAll"), focusKey: "downloads:cancel-all", onBlur: () => setArmed(false), onPress: () => {
         if (armed) run("cancelAll");
@@ -105,13 +131,16 @@ import { AnimatePresence, FocusScope, ScrollView, Text, View } from '@ps5-react/
   }
   // 0.5.3: right under the telemetry. Centered in what was left, it rode up over the telemetry while an announcement
   // took the page's top (state/online.js), there being less left than the card is tall.
-  function Empty({ error: error2, onBack }) {
+  function Empty({ error: error2, onBack, onAddLinks }) {
     const t2 = useT();
     return /* @__PURE__ */ (0, jsx)(View, { style: { flex: 1, alignItems: "center", justifyContent: "flex-start", paddingTop: 30 }, children: /* @__PURE__ */ (0, jsxs)(View, { style: { width: CARD_WIDTH, alignItems: "center", borderRadius: radius.xl, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, paddingVertical: 48, paddingHorizontal: 60 }, children: [
       /* @__PURE__ */ (0, jsx)(View, { style: { width: 84, height: 84, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.surface2 }, children: /* @__PURE__ */ (0, jsx)(Icon, { name: "download", size: 36, color: colors.glow }) }),
       /* @__PURE__ */ (0, jsx)(Text, { style: { marginTop: 24, fontFamily: "Exo2", fontSize: 30, fontWeight: 600, color: colors.fg, lineHeight: 42 }, children: t2(error2 ? "downloads.unavailable" : "downloads.empty") }),
       /* @__PURE__ */ (0, jsx)(Text, { style: { marginTop: 6, width: 720, textAlign: "center", fontFamily: "Exo2", fontSize: 23, color: colors.muted, numberOfLines: 3, ellipsizeMode: "tail", lineHeight: 34 }, children: error2 || t2("downloads.emptyDetail") }),
-      /* @__PURE__ */ (0, jsx)(View, { style: { marginTop: 36 }, children: /* @__PURE__ */ (0, jsx)(Button2, { variant: "primary", label: t2("downloads.browseGames"), focusKey: EMPTY_KEY, autoFocus: true, onPress: onBack }) })
+      /* @__PURE__ */ (0, jsxs)(View, { style: { marginTop: 36, flexDirection: "row", gap: 24 }, children: [
+        /* @__PURE__ */ (0, jsx)(Button2, { variant: "primary", label: t2("downloads.browseGames"), focusKey: EMPTY_KEY, autoFocus: true, onPress: onBack }),
+        /* @__PURE__ */ (0, jsx)(Button2, { variant: "secondary", icon: "external", label: t2("downloads.links.add"), focusKey: LINKS_KEY, onPress: onAddLinks })
+      ] })
     ] }) });
   }
   function DownloadsScreen({ onBack, onOpenGame }) {
@@ -128,6 +157,13 @@ import { AnimatePresence, FocusScope, ScrollView, Text, View } from '@ps5-react/
     const [note, setNote] = (0, useState)("");
     // The job whose "See why" is open: what ShadowMount's logs say about its last launch.
     const [diagnosing, setDiagnosing] = (0, useState)(null);
+    // Add links: the dialog is open (`addingLinks`), then, for several links whose names say nothing, the plan
+    // waits on the player's choice (`linkPlan`).
+    const [addingLinks, setAddingLinks] = (0, useState)(false);
+    const [linkPlan, setLinkPlan] = (0, useState)(null);
+    // Where focus goes once the dialog closes: the first card queued, the choice (which takes it), or back to
+    // the button (null).
+    const linksFocus = (0, useRef)(null);
     const { focusLater } = useNavActions();
     const focused = (0, useRef)(null);
     const latest2 = (0, useRef)(jobs);
@@ -180,6 +216,52 @@ import { AnimatePresence, FocusScope, ScrollView, Text, View } from '@ps5-react/
       onBack();
       return true;
     };
+    // Queues the plan's downloads on the drive a game page would start on: the last one used while it has room
+    // for them, else the first that has. A refusal (no room, a part missing) shows like any other.
+    const queueLinks = (plan, looseAs) => {
+      setFailure("");
+      setNote("");
+      const items = pastedDownloads(plan, { looseAs, debrid: { supports: debridSupports, source: debridSource } });
+      let roots;
+      try {
+        roots = storageRoots();
+      } catch {
+        roots = ["/data"];
+      }
+      const root = roots[startingDrive(roots, (candidate) => freeBytes(candidate) > 0)];
+      const queued = [];
+      for (const { game, release } of items) {
+        try {
+          queued.push(downloadQueue().enqueue(game, release, root));
+        } catch (caught) {
+          setFailure(`${game.title}: ${caught.message}`);
+        }
+      }
+      if (queued.length) {
+        rememberDrive(root);
+        setNote(t("downloads.links.added", { count: queued.length }));
+        linksFocus.current = primaryKey(queued[0]);
+      }
+      focusLater(linksFocus.current ?? LINKS_KEY);
+    };
+    // The dialog's answer: refused with its reason (it stays open to fix the links), or taken.
+    const submitLinks = (text) => {
+      const links = parseLinks(text);
+      if (!links.length) throw new Error(t("downloads.links.none"));
+      const plan = planLinks(links);
+      const problem = plan.downloads.find((item) => item.problem)?.problem;
+      if (problem) throw new Error(problem);
+      if (plan.loose.length > 1) {
+        linksFocus.current = "choice";
+        setLinkPlan(plan);
+      } else queueLinks(plan, "each");
+    };
+    const closeLinks = () => {
+      const target = linksFocus.current;
+      linksFocus.current = null;
+      setAddingLinks(false);
+      if (target !== "choice") focusLater(target ?? LINKS_KEY);
+    };
     const onAction = (action) => {
       const job2 = focused.current && jobs.find((item) => item.id === focused.current.id);
       if (!job2) return false;
@@ -219,7 +301,7 @@ import { AnimatePresence, FocusScope, ScrollView, Text, View } from '@ps5-react/
           // back. With an announcement up, the first card no longer fits under them, so the page scrolls to it.
           /* @__PURE__ */ (0, jsxs)(View, { style: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 }, children: [
             /* @__PURE__ */ (0, jsx)(View, { style: { flex: 1 }, children: /* @__PURE__ */ (0, jsx)(CountBand, {}) }),
-            /* @__PURE__ */ (0, jsx)(QueueActions, { finished: done.length, unfinished: active2.length + stopped.length, run: handlers.runAll })
+            /* @__PURE__ */ (0, jsx)(QueueActions, { finished: done.length, unfinished: active2.length + stopped.length, run: handlers.runAll, onAddLinks: () => setAddingLinks(true) })
           ] }),
           /* @__PURE__ */ (0, jsx)(Telemetry, { error: error2 }),
           /* @__PURE__ */ (0, jsx)(View, { style: { marginTop: 30 }, children: /* @__PURE__ */ (0, jsx)(Section, { ...section, first, handlers, anchor: false }, section.title) })
@@ -227,9 +309,20 @@ import { AnimatePresence, FocusScope, ScrollView, Text, View } from '@ps5-react/
       ) }) }) : [
         /* @__PURE__ */ (0, jsx)(View, { style: { marginBottom: 20 }, children: /* @__PURE__ */ (0, jsx)(CountBand, {}) }, "band"),
         /* @__PURE__ */ (0, jsx)(Telemetry, { error: error2 }, "telemetry"),
-        /* @__PURE__ */ (0, jsx)(Empty, { error: error2, onBack }, "empty")
+        /* @__PURE__ */ (0, jsx)(Empty, { error: error2, onBack, onAddLinks: () => setAddingLinks(true) }, "empty")
       ],
       /* @__PURE__ */ (0, jsx)(ButtonHints, { hints: jobs.length > 0 ? LIST_HINTS : EMPTY_HINTS }),
+      addingLinks ? /* @__PURE__ */ (0, jsx)(URLDialog, { title: t2("downloads.links.title"), detail: t2("downloads.links.detail"), kind: "links", maxLength: LINKS_TEXT, submit: submitLinks, onClose: closeLinks }) : null,
+      linkPlan ? /* @__PURE__ */ (0, jsx)(LinksChoice, { count: linkPlan.loose.length, onClose: () => {
+        setLinkPlan(null);
+        focusLater(LINKS_KEY);
+      }, onChoose: (looseAs) => {
+        const plan = linkPlan;
+        setLinkPlan(null);
+        linksFocus.current = null;
+        queueLinks(plan, looseAs);
+        linksFocus.current = null;
+      } }) : null,
       /* @__PURE__ */ (0, jsx)(AnimatePresence, { children: diagnosing ? /* @__PURE__ */ (0, jsx)(DiagnosisSheet, { title: diagnosing.title, jobId: diagnosing.id, onClose: () => {
         setDiagnosing(null);
         focusLater(primaryKey(diagnosing.id));

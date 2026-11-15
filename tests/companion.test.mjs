@@ -406,7 +406,7 @@ test('phone typing: the newest box open is the one asked, its answer comes back 
   closeKey();
   assert.equal(typing.phoneAsking().title, 'Search games', 'the box under it is asked again');
   assert.throws(() => typing.answerFromPhone(key.id, 'x'), /isn't asking for that any more/);
-  assert.equal(typing.answerFromPhone(typing.phoneAsking().id, 'y'.repeat(5000)), '');
+  assert.equal(typing.answerFromPhone(typing.phoneAsking().id, 'y'.repeat(typing.MAX_TEXT + 1000)), '');
   assert.equal(searched[0].length, typing.MAX_TEXT, 'never more than a box takes');
   closeSearch();
   closeSearch();

@@ -4,7 +4,8 @@
 // answer, as if typed on the console. The newest box open is the one asked; when it closes, the one under it is again.
 // The PS5 keyboard, when it is up for the box, is closed first (state/system-keyboard.js closeForPhone).
 
-  var MAX_TEXT = 2048;
+  // 8192: Downloads → Add links takes a list of links at once.
+  var MAX_TEXT = 8192;
   var open = [];
   var made = 0;
   var listeners = /* @__PURE__ */ new Set();
@@ -18,7 +19,7 @@
     }
   };
   /**
-   * Opens a box to the phone: `title` and `detail` as the console shows them, `kind` "url" | "key" | "search", and
+   * Opens a box to the phone: `title` and `detail` as the console shows them, `kind` "url" | "links" | "key" | "search", and
    * `answer(text)`, which takes the phone's text and returns why it was refused ("" when it was taken). Returns the
    * function that closes it again.
    */
