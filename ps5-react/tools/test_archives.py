@@ -484,6 +484,43 @@ def main():
   assert result[0]=="failed" and result[-1]==NO_FIRST,result
   result,_=stream("zip-stream",[zip.read_bytes()],None)
   assert result[0]=="failed" and "RAR set" in result[-1],result
+  # "free 1": a set extracted while it downloads deletes each volume once it is read, so the drive never holds
+  # more than the extraction and one volume. Each set's volumes arrive one by one; `seen` is which earlier
+  # ones were still there when the last arrived. Nothing is deleted while a wrong password could still be
+  # found: a RAR5 password check or decrypted RAR5 headers prove it at once, RAR4 only by a whole file's
+  # checksum (here its one file spans every volume, so all stay until it is whole).
+  def freeing(name,blobs,password,gap=0.4,free=True):
+   names=[root/f"{name}-v{i}" for i in range(len(blobs))];names[0].write_bytes(blobs[0]);seen=[]
+   args=["--stream"]+(["--free"] if free else [])+([] if password is None else ["--password",password])
+   process=subprocess.Popen([str(binary),str(root/name),str(1024*1024),*map(str,names),*args],stdout=subprocess.PIPE,text=True,env={**os.environ,"ARCHIVE_FREED":"1"})
+   for i,blob in enumerate(blobs[1:],1):
+    time.sleep(gap)
+    if i==len(blobs)-1:seen=[p.exists() for p in names[:-1]]
+    partial=root/f"{name}-v{i}.part";partial.write_bytes(blob);names[i].touch();os.rename(partial,names[i])
+   return process.communicate(timeout=30)[0].splitlines(),names,seen
+  for name,parts,password,content in sets:
+   early=name!="rar4-encrypted"
+   result,names,seen=freeing(name+"-free",[p.read_bytes() for p in parts],password)
+   assert result[0]=="completed" and result[-1]==f"freed {len(parts)-1}",(name,result)
+   if content is not None:assert next((root/(name+"-free")).rglob("game.*")).read_bytes()==content
+   else:assert tree(root/(name+"-free"))==tree(root/"rar-multipart")
+   # Every volume but the last is gone; while the last downloaded, all but the two before it already were.
+   assert [p.exists() for p in names]==[False]*(len(names)-1)+[True],(name,[p.exists() for p in names])
+   assert seen==([False]*(len(names)-2)+[True] if early else [True]*(len(names)-1)),(name,seen)
+  # A wrong password deletes nothing, so the app can try its other known passwords on the whole set.
+  for name,parts in [("rar5-free-wrong",real),("rar4-free-wrong",rar4),("rar5-open-free-wrong",rar5_open)]:
+   result,names,_=freeing(name,[p.read_bytes() for p in parts],"wrong",gap=0.2)
+   assert result[0]=="failed" and result[-1]=="freed 0" and all(p.exists() for p in names),(name,result)
+  # A volume damaged after others were deleted fails at the file's checksum, and says how many are gone (here
+  # every one before the last, which the file spans): the app downloads them again.
+  damaged=[p.read_bytes() for p in rar5_open];damaged[2]=damaged[2][:200]+bytes(len(damaged[2])-200)
+  result,names,_=freeing("rar5-free-damaged",damaged,"DLPSGAME.COM",gap=0.2)
+  assert result[0]=="failed" and "checksum" in result[2] and result[-1]=="freed 3",result
+  assert [p.exists() for p in names]==[False,False,False,True],[p.exists() for p in names]
+  assert not (root/"rar5-free-damaged").exists() and not (root/"rar5-free-damaged.extracting").exists()
+  # Without --free nothing is deleted, as before.
+  result,names,_=freeing("rar5-kept",[p.read_bytes() for p in real],"fixture-password",gap=0.1,free=False)
+  assert result[-1]=="freed 0" and all(p.exists() for p in names),result
   # A worker that goes silent may still write into its staging: the next extraction stages beside it,
   # and a later launch removes what it left once the set is extracted.
   silent=root/"silent-worker";silent.write_text("#!/bin/sh\nexec sleep 60\n");silent.chmod(0o755)

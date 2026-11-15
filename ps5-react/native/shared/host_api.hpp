@@ -1,7 +1,7 @@
 // Copyright (C) 2026 half144 and PS5 React contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Additional attribution term: see LICENSE-ATTRIBUTION.
-// Native API contract (ABI v24) between the hosts and `@ps5-react/core`. The input actions hosts
+// Native API contract (ABI v25) between the hosts and `@ps5-react/core`. The input actions hosts
 // pass to `__ps5ReactDispatch` are a separate contract with its own version (runtime/js/input.js).
 //
 // host_api.cpp (shared) installs `globalThis.__ps5ReactNative` through
@@ -76,7 +76,8 @@
 //   network.setRateLimit(bytes)    ABI v21; bytes per second all file downloads share, 0 for no limit;
 //                                  applies at once, running downloads included, except unlimited ones
 //   network.poll()                 progress/results; consumes terminal snapshots
-//   archives.extract(sources, destination, maxBytes) task ID; bounded native archive worker
+//   archives.extract(sources, destination, maxBytes, password, stream, freeVolumes) task ID; bounded native
+//                                  archive worker; freeVolumes (ABI v25, with stream) deletes each volume once read
 //   archives.inspect(sources)      {kind, refusal, title}; file type from leading bytes (title: a PKG's own
 //                                  title id, ABI v21) and, for an archive,
 //                                  a decoder-memory refusal its headers so far justify; partial files ok
@@ -84,7 +85,8 @@
 //                                  ranges [{offset, bytes}], or need {offset, length}, the range it reads next
 //   archives.cancel(id)            requests cancellation; source volumes remain intact
 //   archives.poll()                state/error/written/total/entries/artifacts; consumes terminal results;
-//                                  total is what the files unpack to once known (RAR, 7z, ZIP), else null
+//                                  total is what the files unpack to once known (RAR, 7z, ZIP), else null;
+//                                  freed (ABI v25): how many of the first volumes freeVolumes deleted
 //   browser.capture(prefix, suffix, timeoutSeconds, rejected, resume) ABI v7 (rejected, resume: v21); capture task bound to a filename, to any file when suffix is "/", or to a file link naming suffix's title id; rejected: up to six refused links scanned past
 //   browser.cancel(id)            stops the read-only payload by closing its connection
 //   browser.poll()                state/error/url; consumes terminal results

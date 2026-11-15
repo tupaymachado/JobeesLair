@@ -9,9 +9,11 @@
 // Request, one item per line: "RARX1", then "threads <n>" (0 picks from the cores), "window <bytes>",
 // "limit <bytes>", "flatten <extension>"..., "reserved <text>", "password <hex>", "dest <directory>",
 // "source <path>"... in volume order, "wait 1" when later volumes are still downloading (each is read once
-// a file has its name), then "end". The engine can then write "cancel" at any time.
+// a file has its name), "free 1" to delete each volume once it is read (see release_volumes), then "end".
+// The engine can then write "cancel" at any time.
 // Answers: "ready", "p <bytes written>" a few times a second, "k" every second, "f <sha256> <size>
-// <path>" once a file is on disk and synced, "d <bytes>" first with the unpacked size of every file when
+// <path>" once a file is on disk and synced, "v <n>" once volume n (1-based, in order) is deleted under
+// "free 1", "d <bytes>" first with the unpacked size of every file when
 // all volumes are there and their headers read, "s" once every file is decoded and only writes and fsyncs are
 // left, "t <key>=<value>..." with where the time went (an engine that does not know a line or a key ignores
 // it), then "ok", "cancelled" or "fail <reason>". A set whose last volume is not the last fails before any
@@ -48,7 +50,7 @@ const char* missing_first = "Missing first RAR volume.";
 struct Options {
   unsigned threads = 0;
   uint64 window = 0, limit = 0;
-  bool wait = false;
+  bool wait = false, free_volumes = false;
   std::vector<std::string> flatten, sources;
   std::string reserved, password, destination;
 };
@@ -118,6 +120,7 @@ bool read_request(Options& options) {
     else if (key == "password" && !from_hex(value, options.password)) return false;
     else if (key == "dest") options.destination = value;
     else if (key == "wait") options.wait = value == "1";
+    else if (key == "free") options.free_volumes = value == "1";
     else if (key == "source") options.sources.push_back(value);
   }
   return false;
@@ -393,6 +396,10 @@ struct Session {
   Writer writer;
   // `reading` is the index of the volume UnRAR is reading, the count of them once it wants one past the last.
   size_t next_volume = 1, reading = 0;
+  // Under "free 1": `opened` is the volume UnRAR has open, `freed` how many before it are deleted, and
+  // `trusted` whether the password, if any, is known to be right (see trust_password).
+  size_t opened = 0, freed = 0;
+  bool trusted = false;
   bool writing = false, missing_volume = false, missing_password = false, last_checked = false, last_cut = false;
   const Archive* archive = nullptr;
   uint64 written = 0, last_report = 0;
@@ -400,6 +407,37 @@ struct Session {
 };
 
 void check_last(Session& session);
+
+// "free 1": every volume before the one UnRAR has open is read and closed for good (MergeArchive closes a
+// volume before it opens the next and reopens it only when that fails, which ends the extraction), so it is
+// deleted, and the drive holds the files written so far and the rest of the set: never more than the
+// extraction's size and one volume. Nothing is deleted while a wrong password could still be found
+// (trust_password): the engine then tries the other known ones on the whole set. A volume that cannot be
+// deleted is kept, and so are the ones after it, so "v" lines stay a run from the first.
+void release_volumes(Session& session) {
+  if (!session.options.free_volumes || !session.trusted) return;
+  while (session.freed < session.opened && session.freed + 1 < session.options.sources.size()) {
+    const std::string& path = session.options.sources[session.freed];
+    struct stat st;
+    if (lstat(path.c_str(), &st) || !S_ISREG(st.st_mode) || unlink(path.c_str())) return;
+    say("v " + std::to_string(++session.freed));
+  }
+}
+
+// Whether a file header shows the password is right, before its data is decoded: no encryption at all, a
+// RAR5 file with a password check value (UnRAR refuses a wrong password at once), or RAR5 headers that
+// decrypted (their CRC32 checks the key). RAR 1.5-4 has no such check; a wrong password shows only as a
+// checksum mismatch at the file's end, so there the first whole file decides (extract).
+bool header_proves_password(const Archive& archive, const FileHeader& header) {
+  if (!header.Encrypted && !archive.Encrypted) return true;
+  return archive.Format == RARFMT50 && (!header.Encrypted || header.UsePswCheck || archive.Encrypted);
+}
+
+void trust_password(Session& session) {
+  if (session.trusted) return;
+  session.trusted = true;
+  release_volumes(session);
+}
 
 // Progress, a look for "cancel" and, while a set downloads, for its last volume, a few times a second.
 void heartbeat(Session& session) {
@@ -468,7 +506,11 @@ int CALLBACK callback(UINT message, LPARAM user, LPARAM p1, LPARAM p2) {
       if (p2 == RAR_VOL_NOTIFY && session.archive->Format == RARFMT50 && session.archive->VolNumber &&
           session.archive->VolNumber != session.next_volume - 1)
         session.missing_volume = true;
-      return p2 == RAR_VOL_NOTIFY && !session.missing_volume ? 1 : -1;
+      if (p2 != RAR_VOL_NOTIFY || session.missing_volume) return -1;
+      // The next volume is open, so the ones before it are read.
+      session.opened = session.next_volume - 1;
+      release_volumes(session);
+      return 1;
     case UCM_NEEDPASSWORD:
     case UCM_NEEDPASSWORDW:  // Asked only when none was given.
       session.missing_password = true;
@@ -552,6 +594,7 @@ std::string extract(Session& session, CommandData& command, Archive& archive, Cm
     }
     const FileHeader& header = archive.FileHead;
     if (header.SplitBefore) return describe(ERAR_EOPEN);
+    if (header_proves_password(archive, header)) trust_password(session);
     std::string name;
     WideToUtf(header.FileName, name);
     while (!name.empty() && name.back() == '/') name.pop_back();
@@ -598,7 +641,11 @@ std::string extract(Session& session, CommandData& command, Archive& archive, Cm
     if (const auto error = session.writer.error(); !error.empty()) return error;
     if (cancelled) return {};
     if (const int code = dll_error(command)) return describe(code);
-    if (!directory) session.writer.end(size);
+    if (!directory) {
+      session.writer.end(size);
+      // A whole file decoded with its checksum right: the password is (see header_proves_password).
+      trust_password(session);
+    }
   }
 }
 
@@ -650,8 +697,10 @@ size_t suspect_volume(const Session& session, bool early_end) {
     struct stat st;
     sizes.push_back(lstat(path.c_str(), &st) ? 0 : uint64(st.st_size));
   }
-  const uint64 full = sizes.size() > 1 ? *std::max_element(sizes.begin(), sizes.end() - 1) : 0;
-  for (size_t i = 0; i + 1 < sizes.size(); ++i)
+  // Volumes deleted under "free 1" were read whole; they are not compared.
+  const size_t kept = std::min(session.freed, sizes.size());
+  const uint64 full = sizes.size() > kept + 1 ? *std::max_element(sizes.begin() + kept, sizes.end() - 1) : 0;
+  for (size_t i = kept; i + 1 < sizes.size(); ++i)
     if (sizes[i] < full) return i + 1;
   return early_end && session.reading < sources.size() ? session.reading + 1 : 0;
 }
@@ -872,7 +921,8 @@ int main() {
     // A volume that is a copy of an earlier one, named first: before decoding (its last volume is not the
     // set's last) or during it. "... Volume 4 of 10 is a copy of part 3."
     std::pair<size_t, size_t> duplicate{0, 0};
-    if (!cancelled && session.options.sources.size() > 1 && (early_end || error == describe(ERAR_BAD_DATA)))
+    // Once volumes are deleted a copy among them can no longer be told; a damaged set is downloaded again.
+    if (!cancelled && !session.freed && session.options.sources.size() > 1 && (early_end || error == describe(ERAR_BAD_DATA)))
       duplicate = duplicate_volume(session.options);
     if (duplicate.first)
       error = describe(ERAR_EOPEN) + " Volume " + std::to_string(duplicate.first) + " of " + std::to_string(session.options.sources.size()) +

@@ -596,6 +596,7 @@ std::string rar_request(const Request& request, const std::string& staging) {
   for (auto extension : image_extensions) text += "flatten " + std::string(extension) + "\n";
   text += "reserved .ps5-react-\n";
   if (request.stream) text += "wait 1\n";
+  if (request.stream && request.free_volumes) text += "free 1\n";
   if (!request.password.empty()) {
     text += "password ";
     for (unsigned char c : request.password) { text += digits[c >> 4]; text += digits[c & 15]; }
@@ -668,6 +669,11 @@ bool extract_rar(Job& job, const std::string& staging, std::string& receipt, std
         job.snapshot.written = std::min(written, job.request.max_bytes);
       } else if (line.starts_with("f ")) {
         if (const auto refusal = rar_file(job, staging, line.substr(2), total, receipt); !refusal.empty() && error.empty()) error = refusal;
+      } else if (line.starts_with("v ")) {
+        // The worker deleted volume n; it reports them in order, from the first.
+        const auto freed = std::strtoul(line.c_str() + 2, nullptr, 10);
+        std::lock_guard lock(job.mutex);
+        if (freed == job.snapshot.freed + 1 && freed < job.request.sources.size()) job.snapshot.freed = static_cast<std::uint32_t>(freed);
       } else if (line.starts_with("d ")) {
         const std::uint64_t declared = std::strtoull(line.c_str() + 2, nullptr, 10);
         std::lock_guard lock(job.mutex);
@@ -888,7 +894,14 @@ void run(const std::shared_ptr<Job>& pointer) {
   }
   // A RAR worker from before the "s" line never said it was finishing.
   if (error.empty() && !job.cancelled) enter(job, "finishing");
-  if (error.empty() && !job.cancelled && request.stream) {
+  bool freed = false;
+  {
+    std::lock_guard lock(job.mutex);
+    freed = job.snapshot.freed > 0;
+  }
+  // A set whose volumes were deleted as they were read keeps the identity of its paths: the app keeps each
+  // set in a folder of its own, and nothing is left to read the full identity from.
+  if (error.empty() && !job.cancelled && request.stream && !freed) {
     // Every volume exists now: the receipt names them as a run after the download would.
     const auto full = input_identity(request);
     if (full.empty()) error = "Archive source is missing or not a regular file.";

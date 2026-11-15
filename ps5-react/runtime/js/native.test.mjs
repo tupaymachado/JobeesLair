@@ -398,7 +398,7 @@ test('archive and download task IDs are isolated while sharing the polling timer
   try {
     const download = Downloads.enqueue({url: 'https://example.com/file', destination: '/download0/file'});
     const archive = Archives.extract({sources: ['/download0/file'], destination: '/download0/out', password: '[DLPSGAME.COM]'});
-    assert.deepEqual(extractions, [[['/download0/file'], '/download0/out', 1024**4, '[DLPSGAME.COM]', false]]);
+    assert.deepEqual(extractions, [[['/download0/file'], '/download0/out', 1024**4, '[DLPSGAME.COM]', false, false]]);
     assert.equal(Archives.streams, true);
     for (const password of [42, 'bad\0password', 'x'.repeat(1025)])
       assert.throws(() => Archives.extract({sources: ['/download0/file'], destination: '/download0/out', password}), /password/);
@@ -411,6 +411,18 @@ test('archive and download task IDs are isolated while sharing the polling timer
     assert.equal(download.snapshot.state, 'queued');
     networkSnapshots = [{id: 1, state: 'completed', written: 100}]; tick();
     assert.equal((await download.done).written, 100);
+    // ABI v25: freeVolumes only goes with stream, and a streamed task's progress carries `freed`.
+    archiveSnapshots = [];
+    const whole = Archives.extract({sources: ['/download0/a', '/download0/b'], destination: '/download0/set', freeVolumes: true});
+    archiveSnapshots = [{id: 1, state: 'failed', error: 'x'}]; tick(); await whole.done.catch(() => {});
+    archiveSnapshots = [];
+    const streamed = Archives.extract({sources: ['/download0/a', '/download0/b'], destination: '/download0/set', stream: true, freeVolumes: true});
+    assert.deepEqual(extractions.slice(1).map(args => args.slice(4)), [[false, false], [true, true]]);
+    assert.equal(Archives.freesVolumes, true);
+    archiveSnapshots = [{id: 1, state: 'extracting', written: 10, freed: 1}]; tick();
+    assert.equal(streamed.snapshot.freed, 1);
+    archiveSnapshots = [{id: 1, state: 'completed', written: 20, freed: 1, artifacts: []}]; tick();
+    await streamed.done;
   } finally {
     globalThis.setInterval = originalInterval; globalThis.clearInterval = originalClear;
     delete globalThis.__ps5ReactNative;

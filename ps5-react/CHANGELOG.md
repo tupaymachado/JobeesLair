@@ -2,7 +2,15 @@
 
 ## Unreleased — the keyboard, live updates, symbols, right to left, Linux and keeping state
 
-Native ABI v24.
+Native ABI v25.
+
+- **A streamed RAR set can delete its volumes as it reads them** (`Archives.extract({..., stream: true,
+  freeVolumes: true})`, ABI v25; `Archives.freesVolumes` says the host takes it). The RAR worker takes `free 1`
+  and deletes each volume once UnRAR opens the next one (UnRAR closes a volume for good before that), reporting
+  `v <n>`; progress carries `freed`. Nothing is deleted until the password is known right (unencrypted, a RAR5
+  password check value or encrypted RAR5 headers at once; RAR 1.5-4 after the first whole file's checksum), so
+  a wrong password leaves the set whole. Such a set's receipt keeps its paths' identity. `tools/test_archives.py`
+  covers RAR4 and RAR5, encrypted or not, wrong passwords and a damaged later volume.
 
 - **The PS5's own keyboard** (`Keyboard`): `Keyboard.open({title, text, placeholder, maxLength, type, enter,
   multiline, password})` shows the system keyboard (libSceImeDialog) over the app, in the player's languages and

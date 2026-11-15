@@ -17,7 +17,7 @@ Controller.setLightBar('#38bdf8');
 ## Contract
 
 The modules in `runtime/js/native.js` wrap `globalThis.__ps5ReactNative`, which
-each host installs before the bundle runs. Its exact shape (ABI v24) is
+each host installs before the bundle runs. Its exact shape (ABI v25) is
 documented in [`native/shared/host_api.hpp`](../native/shared/host_api.hpp).
 `native/shared/host_api.cpp` implements the filesystem with POSIX and the object
 itself; `native/ps5/` and `native/desktop/` implement the platform functions.
@@ -794,6 +794,21 @@ of each folder.
 A task's `total` in `Archives.extract` progress is what the files unpack to once
 it is known: the RAR worker reads it from every volume's headers, and a 7z or
 ZIP gives it before the first file is written. It is `null` for other formats.
+
+`freeVolumes: true` (ABI v25, only with `stream: true`; `Archives.freesVolumes`
+tells whether the host takes it) deletes each volume of a streamed RAR set once
+the RAR worker has read it, so the drive holds the extracted files and at most
+one volume more instead of the whole set beside them. UnRAR closes a volume for
+good before it opens the next, so a volume is deleted when the next one opens.
+Nothing is deleted until the password is known to be right: at once for an
+unencrypted set, a RAR5 file with a password check value, or RAR5 encrypted
+headers; for RAR 1.5-4 encryption only after the first whole file passes its
+checksum. A wrong password therefore leaves every volume for another attempt.
+Progress `freed` counts the first volumes deleted; they stay deleted when the
+task then fails or is cancelled (a damaged later volume, an interruption), and
+the app has to download them again before extracting the set once more. The
+completion receipt of such a set names the volumes' paths, not their files.
+This is the one exception to "source files are preserved" above.
 
 
 ## Browser download capture (ABI v7)

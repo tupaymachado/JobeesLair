@@ -46,11 +46,12 @@ int main(int argc,char** argv){
  if(argc<4)return 2;
  archives::Request request;request.destination=argv[1];request.max_bytes=std::stoull(argv[2]);
  // --stream: later volumes may appear while it runs; --cancel-after <ms> cancels it then; --again <worker>
- // runs the same request once more in this process with that rar-extract.
+ // runs the same request once more in this process with that rar-extract; --free deletes volumes once read.
  long cancel_after=-1;const char* again=nullptr;
  for(int i=3;i<argc;i++){
   if(std::string(argv[i])=="--password"&&i+1<argc)request.password=argv[++i];
   else if(std::string(argv[i])=="--stream")request.stream=true;
+  else if(std::string(argv[i])=="--free")request.free_volumes=true;
   else if(std::string(argv[i])=="--cancel-after"&&i+1<argc)cancel_after=std::stol(argv[++i]);
   else if(std::string(argv[i])=="--again"&&i+1<argc)again=argv[++i];
   else request.sources.emplace_back(argv[i]);
@@ -62,6 +63,7 @@ int main(int argc,char** argv){
  while(true){for(const auto& s:archives::poll())if(ended(s)){
   std::cout<<s.state<<"\n"<<s.written<<"\n"<<s.error;
   if(getenv("ARCHIVE_ARTIFACTS")){std::cout<<"\nartifacts";for(const auto& path:s.artifacts)std::cout<<"|"<<path;}
+  if(getenv("ARCHIVE_FREED"))std::cout<<"\nfreed "<<s.freed;
   if(!again){archives::stop();return 0;}
   std::cout<<"\n";setenv("PS5_REACT_RAR_WORKER",again,1);again=nullptr;cancel_after=-1;
   if(!(id=archives::enqueue(copy,error))){std::cout<<"failed\n"<<error;return 0;}

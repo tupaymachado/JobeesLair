@@ -51,6 +51,7 @@ JSValue extract(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
     request.sources.push_back(std::move(file));
   }
   if (argc > 4) request.stream = JS_ToBool(ctx,argv[4]) == 1;
+  if (argc > 5) request.free_volumes = request.stream && JS_ToBool(ctx,argv[5]) == 1;
   std::string error; const auto id = archives::enqueue(std::move(request),error);
   if (!id) return JS_ThrowPlainError(ctx,"archives.extract: %s",error.c_str());
   return JS_NewUint32(ctx,id);
@@ -151,6 +152,7 @@ JSValue poll(JSContext* ctx, JSValueConst, int, JSValueConst*) {
     JS_SetPropertyStr(ctx,item,"total",snapshot.total ? JS_NewFloat64(ctx,snapshot.total) : JS_NULL);
     JS_SetPropertyStr(ctx,item,"unpacked",snapshot.unpacked ? JS_NewFloat64(ctx,snapshot.unpacked) : JS_NULL);
     JS_SetPropertyStr(ctx,item,"entries",JS_NewFloat64(ctx,snapshot.entries));
+    JS_SetPropertyStr(ctx,item,"freed",JS_NewUint32(ctx,snapshot.freed));
     JSValue artifacts = JS_NewArray(ctx); std::uint32_t at = 0;
     for (const auto& path : snapshot.artifacts) JS_SetPropertyUint32(ctx,artifacts,at++,JS_NewString(ctx,path.c_str()));
     JS_SetPropertyStr(ctx,item,"artifacts",artifacts);

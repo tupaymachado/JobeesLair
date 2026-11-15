@@ -529,11 +529,14 @@ export const Downloads = {
 /** Streaming archive extraction off-thread; source volumes are preserved on failure/cancel. */
 export const Archives = Object.freeze({
   /** `stream: true` starts a RAR set while its later volumes still download: only the first must exist;
-   * each next one is read once a file appears under its final name (write volumes elsewhere and rename). */
-  extract({sources, destination, maxBytes = 1024**4, password, stream = false}) {
+   * each next one is read once a file appears under its final name (write volumes elsewhere and rename).
+   * `freeVolumes: true` (ABI v25, with `stream`) deletes each volume once it is read and the password is known
+   * right; progress `freed` counts the first volumes deleted, which stay deleted if the task then fails. */
+  extract({sources, destination, maxBytes = 1024**4, password, stream = false, freeVolumes = false}) {
     if (password != null && (typeof password !== 'string' || password.length > 1024 || password.includes('\0')))
       throw new TypeError('Archives.extract: password must be a string without NUL, at most 1024 UTF-8 bytes.');
-    const id = host().archives.extract(sources, destination, maxBytes, password ?? '', stream === true);
+    const id = host().archives.extract(sources, destination, maxBytes, password ?? '', stream === true,
+      stream === true && freeVolumes === true);
     return networkTask(id, 'Archives.extract', destination, 'archives');
   },
   /** What the files' leading bytes are, and why their headers so far already rule out extraction.
@@ -549,6 +552,8 @@ export const Archives = Object.freeze({
   inspectRanges: ranges => host().archives.inspectRanges(ranges),
   /** Whether `extract` takes `stream`. */
   streams: true,
+  /** ABI v25: whether `extract` takes `freeVolumes`. */
+  freesVolumes: true,
 });
 
 /**
