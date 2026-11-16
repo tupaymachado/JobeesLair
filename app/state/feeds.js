@@ -44,8 +44,9 @@ import { FileSystem, Http } from '@ps5-react/core';
   function readCache(url) {
     for (const path of [cacheFile(url), `${LEGACY_DIR}/${stableKey(url)}.json`]) {
       try {
-        const cache = JSON.parse(FileSystem.readFile(path));
-        if (cache?.url === url && cache.document) return cache;
+        const text = FileSystem.readFile(path);
+        const cache = JSON.parse(text);
+        if (cache?.url === url && cache.document) return Object.assign(cache, { size: text.length });
       } catch {
       }
     }
@@ -70,11 +71,21 @@ import { FileSystem, Http } from '@ps5-react/core';
   var feedRatings = {};
   // MODIFIED (tupay): the store logos the feeds carry for games they do not list, { id: { logo, logoAspect, logoDark } }.
   var feedLogos = {};
+  // MODIFIED (tupay): a feed's games stay in the script heap while the app runs (about four times its cached text),
+  // next to the 2 000 bundled ones, and the heap holds 64 MiB: the catalogs whole (5 MiB cached) ran it out of
+  // memory, and then no game page could read its links. Feeds past LOADED_BYTES together wait for a smaller copy.
+  var LOADED_BYTES = 3 * 1024 * 1024;
   function loadFeedGames() {
     const out = [];
+    let bytes = 0;
     for (const url of allFeeds()) {
       const cache = readCache(url);
       if (!cache) continue;
+      if (bytes + cache.size > LOADED_BYTES) {
+        console.log(`feeds: cached ${url} not loaded: ${cache.size} bytes past the room left (${LOADED_BYTES - bytes})`);
+        continue;
+      }
+      bytes += cache.size;
       try {
         const feed = parseFeed(cache.document, url);
         loaded.set(url, cache.hash);

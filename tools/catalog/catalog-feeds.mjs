@@ -4,9 +4,9 @@
 // The upstream live catalog (live-feed.mjs) mixes every catalog into one file and keeps no trace of where a link
 // came from. These feeds keep it: each one says which catalog it is (`catalog: { id, name }`), and the app tags every
 // release it brings with that id. The same link in two catalogs is one release with both tags (the app merges
-// releases by address, state/release-cache.js), and a link the app already bundles takes the tag too, so a catalog
-// that fits whole is listed whole. A catalog too big for one feed (DLPS: ~30 000 links, a feed holds 6 000) brings
-// only the links the app does not bundle; the bundled ones carry their catalog already (data/catalogs.js).
+// releases by address, state/release-cache.js); the bundled links carry their catalog already (data/catalogs.js).
+// Every feed stays in the console's script heap while the app runs, so all of them share BUDGET: zstd and LZ4
+// links first, then the games the app lacks, then links the app lacks for games it bundles (main).
 //
 // Each link also says how it is packed when its name or the game's notes do ("zstd · Data", "Format: LZ4"):
 // `compression`, for the Compression filter. A game's technical notes (Format, Region, Firmware, APR, Notes...)
@@ -34,9 +34,12 @@ const UPSTREAM = 'https://raw.githubusercontent.com/JVK3R/JobeesLair-Lists/main/
 const UA = 'JobeesLair-catalog-feeds (+https://github.com/tupaymachado/JobeesLair)';
 // Screenshots and whole descriptions only in a catalog that fits whole: in one that does not, the room goes to more games.
 // A little under the app's limits for one feed (state/feed-format.js, state/feeds.js).
-const MAX_GAMES = 1450, MAX_LINKS = 5800, MAX_BYTES = 1.9 * 1024 * 1024;
-// Links kept per game when a catalog does not fit whole: every build gets one before any build gets a second.
-const NEW_GAME_LINKS = 16, KNOWN_GAME_LINKS = 6;
+const MAX_GAMES = 1450, MAX_LINKS = 5800, MAX_RELEASES = 64;
+// The room for every feed together, and for one (its refresh holds its text, its JSON and the parsed copy at once).
+const BUDGET = (Number(process.env.JL_FEEDS_MIB) || 1.2) * 1024 * 1024, FEED_BYTES = 0.6 * 1024 * 1024;
+const MAX_LOGOS = 400;
+// Links kept per game beyond its zstd and LZ4 ones: every build gets one before any build gets a second.
+const NEW_GAME_LINKS = 6, KNOWN_GAME_LINKS = 2;
 const TITLE_ID = /^(?:CUSA|PPSA)\d{5}$/;
 
 async function fetchText(url, accept = 'application/json') {
@@ -437,74 +440,115 @@ async function main() {
       console.warn(`skipped ${catalog.name}: ${error.message}`);
     }
   }
-  // Whether a catalog fits one feed whole (every link, bundled ones too), else only what the app lacks.
-  const plans = loaded.map(({ catalog, games }) => {
-    const links = games.reduce((sum, game) => sum + game.links.length, 0);
-    const whole = games.length <= MAX_GAMES && links <= MAX_LINKS;
-    const kept = whole ? games : games.map((game) => ({ ...game, links: game.links.filter((link) => !bundledUrls.has(link.url)) })).filter((game) => game.links.length);
-    const ordered = kept.sort((a, b) => Number(bundledIds.has(a.id)) - Number(bundledIds.has(b.id)) || b.at - a.at || a.id.localeCompare(b.id));
-    const chosen = ordered.map((game) => ({
-      game,
-      sets: whole ? setsOf(game.links) : pick(setsOf(game.links), bundledIds.has(game.id) ? KNOWN_GAME_LINKS : NEW_GAME_LINKS),
-    }));
-    return { catalog, whole, links, chosen };
+  // What goes in, in order, while the room lasts (BUDGET for every feed together, FEED_BYTES for one):
+  //   1. every zstd and LZ4 link, bundled links too (the app knows how a link is packed only from a feed);
+  //   2. the games the app does not bundle, newest first, with their pictures and a few links;
+  //   3. links the app lacks for the games it bundles, newest first, two a game.
+  // A feed's games stay in the console's script heap for as long as the app runs (about seven times the file's
+  // size), and the app bundles 2 000 games already: all the catalogs whole (4 MiB) ran it out of memory.
+  const plans = loaded.map(({ catalog, games }) => ({ catalog, games, entries: new Map(), bytes: 0, links: 0, regrouped: 0 }));
+  const regroup = (plan, sets) => sets.flatMap((set) => {
+    if (!set.links.some((link) => NAMED_HOST.test(new URL(link.url).host))) return [set];
+    const split = byNames(set, names);
+    if (split[0] !== set) plan.regrouped++;
+    return split;
   });
-  // The pages to read and the art to ask for, for everything any feed may list.
-  const wanted = plans.flatMap(({ chosen }) => chosen.slice(0, MAX_GAMES + 200)).flatMap(({ sets }) => sets).flatMap((set) => set.links.map((link) => link.url))
+  const isNew = (id) => !bundledIds.has(id);
+  const newest = (a, b) => b.at - a.at || a.id.localeCompare(b.id);
+  const tier = (filter, max) => plans.flatMap((plan) => [...plan.games].sort(newest).map((game) => {
+    const links = game.links.filter((link) => filter(game, link));
+    return links.length ? { plan, game, sets: max ? pick(setsOf(links), max) : setsOf(links) } : null;
+  }).filter(Boolean));
+  const tiers = [
+    tier((game, link) => Boolean(link.compression)),
+    tier((game, link) => isNew(game.id) && !link.compression, NEW_GAME_LINKS).sort((a, b) => newest(a.game, b.game)),
+    tier((game, link) => !isNew(game.id) && !link.compression && !bundledUrls.has(link.url), KNOWN_GAME_LINKS).sort((a, b) => newest(a.game, b.game)),
+  ];
+  // The pages to read and the art to ask for, for everything a feed may list.
+  const candidates = tiers.flat().slice(0, 6000);
+  const wanted = candidates.flatMap(({ sets }) => sets).flatMap((set) => set.links.map((link) => link.url))
     .filter((url) => NAMED_HOST.test(new URL(url).host));
   const looked = await readNames(wanted, names);
   const noLogo = bundledWithoutLogo();
   const asked = await readArt([
-    ...plans.flatMap(({ chosen }) => chosen.slice(0, MAX_GAMES + 200)).map(({ game }) => game.id).filter((id) => !bundledIds.has(id)),
+    ...new Set(candidates.map(({ game }) => game.id).filter(isNew)),
     ...[...noLogo].filter((id) => id.startsWith('PPSA')),
     ...[...noLogo].filter((id) => !id.startsWith('PPSA')),
   ], art, today);
-  // The store logos of bundled games that have none, for the carousel: { id: [url, aspect, dark] }, on the smallest feed.
-  const logos = Object.fromEntries([...noLogo].filter((id) => art[id]?.logo).map((id) => {
-    const logo = logoOf(art[id]);
-    return [id, [logo.logo, logo.logoAspect, logo.logoDark ? 1 : 0]];
-  }));
+  // The store logos of bundled games that have none, for the carousel: { id: [url, aspect, dark] }, the best known first.
+  const logos = Object.fromEntries([...noLogo].filter((id) => art[id]?.logo)
+    .sort((a, b) => (ratings[b]?.[1] ?? 0) - (ratings[a]?.[1] ?? 0) || a.localeCompare(b)).slice(0, MAX_LOGOS).map((id) => {
+      const logo = logoOf(art[id]);
+      return [id, [logo.logo, logo.logoAspect, logo.logoDark ? 1 : 0]];
+    }));
+  // The ratings and logos ride on the smallest feed (chosen once the feeds are filled): every console reads every feed.
+  let total = jlxSize(ratings) + jlxSize(logos) + plans.length * 300;
+  // A game the app does not bundle is described once, in the first feed that lists it (the app takes the first).
+  const described = new Set();
+  const page = (game) => ({
+    art: artOf(game, art[game.id]),
+    ...(art[game.id]?.shots?.length ? { shots: art[game.id].shots.slice(0, 3).map((url) => `${url}?w=1280&thumb=false`) } : {}),
+    summary: game.about.slice(0, 2).join(' ').slice(0, 300),
+    about: game.about.slice(0, 3).map((line) => line.slice(0, 600)),
+    addedAt: firstSeen[game.id] ??= today,
+  });
+  let full = false;
+  for (const candidates of tiers) {
+    for (const { plan, game, sets } of candidates) {
+      const releases = releasesOf(game, regroup(plan, sets)).slice(0, 64);
+      const entry = plan.entries.get(game.id);
+      const room = MAX_RELEASES - (entry?.releases.length ?? 0);
+      const adding = releases.filter((release) => !entry?.releases.some((kept) => kept.url === release.url)).slice(0, room);
+      if (!adding.length || plan.links + adding.length > MAX_LINKS || (!entry && plan.entries.size >= MAX_GAMES)) continue;
+      const describe = isNew(game.id) && !described.has(game.id);
+      const size = adding.reduce((sum, release) => sum + jlxSize(release) + 1, 0)
+        + (entry ? 0 : jlxSize({ id: game.id, title: game.title, releases: [] }) + 1)
+        + (describe ? jlxSize(page(game)) : 0);
+      if (total + size > BUDGET) { full = true; continue; }
+      if (plan.bytes + size > FEED_BYTES) continue;
+      total += size;
+      plan.bytes += size;
+      plan.links += adding.length;
+      if (describe) described.add(game.id);
+      if (entry) entry.releases.push(...adding);
+      else plan.entries.set(game.id, { id: game.id, title: game.title, releases: adding });
+    }
+  }
+  // A feed with no games is refused by the app: one the room left empty lists its newest game's links anyway.
+  for (const plan of plans) {
+    if (plan.entries.size) continue;
+    const game = [...plan.games].sort(newest)[0];
+    if (!game) continue;
+    const releases = releasesOf(game, regroup(plan, pick(setsOf(game.links), KNOWN_GAME_LINKS)));
+    plan.entries.set(game.id, { id: game.id, title: game.title, releases });
+    plan.links += releases.length;
+    total += jlxSize(plan.entries.get(game.id));
+  }
+  // Pages go to the first feed (in the app's order) that lists the game.
+  const first = new Map();
+  for (const plan of plans) for (const id of plan.entries.keys()) if (isNew(id) && !first.has(id)) first.set(id, plan);
+  const byId = new Map(plans.flatMap((plan) => plan.games.map((game) => [game.id, game])));
 
-  // The ratings ride on the smallest feed: every console reads every feed.
-  const smallest = plans.reduce((best, plan) => (!best || plan.links < best.links ? plan : best), null);
+  const smallest = plans.filter((plan) => plan.entries.size).reduce((best, plan) => (!best || plan.bytes < best.bytes ? plan : best), null);
   mkdirSync(OUT, { recursive: true });
   const index = [];
   for (const plan of plans) {
     const { catalog } = plan;
-    const withRatings = plan === smallest ? ratings : {};
-    const withLogos = plan === smallest ? logos : {};
-    const out = [];
-    let links = 0, bytes = 300 + jlxSize(withRatings) + jlxSize(withLogos), regrouped = 0;
-    for (const { game, sets } of plan.chosen) {
-      if (out.length >= MAX_GAMES || links >= MAX_LINKS) break;
-      const known = bundledIds.has(game.id);
-      const final = sets.flatMap((set) => {
-        if (!set.links.some((link) => NAMED_HOST.test(new URL(link.url).host))) return [set];
-        const split = byNames(set, names);
-        if (split[0] !== set) regrouped++;
-        return split;
-      });
-      const releases = releasesOf(game, final).slice(0, 64);
-      if (!releases.length || links + releases.length > MAX_LINKS) continue;
-      const entry = {
-        id: game.id,
-        title: game.title,
-        ...(known ? {} : { art: artOf(game, art[game.id]), ...(plan.whole && art[game.id]?.shots?.length ? { shots: art[game.id].shots.slice(0, 4).map((url) => `${url}?w=1280&thumb=false`) } : {}), summary: game.about.slice(0, 2).join(' ').slice(0, 300), about: plan.whole ? game.about : game.about.map((line) => line.slice(0, 300)), addedAt: firstSeen[game.id] ??= today }),
-        releases,
-      };
-      const size = jlxSize(entry) + 1;
-      if (bytes + size > MAX_BYTES) break;
-      bytes += size;
-      links += releases.length;
-      out.push(entry);
-    }
+    const out = [...plan.entries.values()].map((entry) => (first.get(entry.id) === plan
+      ? { id: entry.id, title: entry.title, ...page(byId.get(entry.id)), releases: entry.releases }
+      : entry));
     const name = clip(catalog.name, 60) || catalog.slug;
-    const feed = { version: 1, name, catalog: { id: catalog.slug, name }, source: 'pegasus-dl.dev', ...(Object.keys(withRatings).length ? { ratings: withRatings } : {}), ...(Object.keys(withLogos).length ? { logos: withLogos } : {}), games: out };
-    writeAtomic(join(OUT, `${catalog.slug}.jlx`), `${encodeJlx(feed)}\n`);
-    const left = plan.chosen.length - out.length;
-    index.push({ id: catalog.slug, name, file: `${catalog.slug}.jlx`, games: out.length, links, whole: plan.whole && !left, updatedAt: new Date().toISOString() });
-    console.log(`${catalog.slug}: ${out.length} games, ${links} links, ${(bytes / 1048576).toFixed(2)} MiB, ${plan.whole ? 'whole' : `only links the app lacks (${plan.links} in the catalog)`}${left ? `, ${left} games left out` : ''}${regrouped ? `, ${regrouped} sets regrouped by file name` : ''}`);
+    const withExtras = plan === smallest;
+    const feed = { version: 1, name, catalog: { id: catalog.slug, name }, source: 'pegasus-dl.dev', ...(withExtras && Object.keys(ratings).length ? { ratings } : {}), ...(withExtras && Object.keys(logos).length ? { logos } : {}), games: out };
+    const text = `${encodeJlx(feed)}\n`;
+    writeAtomic(join(OUT, `${catalog.slug}.jlx`), text);
+    const compressed = out.reduce((sum, entry) => sum + entry.releases.filter((release) => release.compression).length, 0);
+    const fresh = out.filter((entry) => isNew(entry.id)).length;
+    index.push({ id: catalog.slug, name, file: `${catalog.slug}.jlx`, games: out.length, links: plan.links, compressed, newGames: fresh, updatedAt: new Date().toISOString() });
+    console.log(`${catalog.slug}: ${out.length} games (${fresh} not bundled), ${plan.links} links (${compressed} zstd/LZ4), ${(text.length / 1048576).toFixed(2)} MiB${plan.regrouped ? `, ${plan.regrouped} sets regrouped by file name` : ''}`);
   }
+  const notBundled = new Set(plans.flatMap((plan) => plan.games.map((game) => game.id)).filter(isNew));
+  console.log(`all feeds: ${(total / 1048576).toFixed(2)} of ${(BUDGET / 1048576).toFixed(2)} MiB${full ? ' (full)' : ''}; games not bundled: ${described.size} of ${notBundled.size}`);
   writeAtomic(join(OUT, 'index.json'), `${JSON.stringify({ updatedAt: new Date().toISOString(), feeds: index }, null, 1)}\n`);
   writeAtomic(join(STATE, 'names.jlx'), `${encodeJlx(Object.fromEntries(Object.entries(names).sort()))}\n`);
   writeAtomic(join(STATE, 'first-seen.json'), `${JSON.stringify(Object.fromEntries(Object.entries(firstSeen).sort()), null, 1)}\n`);

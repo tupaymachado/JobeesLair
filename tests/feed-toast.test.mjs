@@ -56,3 +56,25 @@ test('the toast: progress while running, then the result', async () => {
   assert.equal(failed.title, 'ZER0GAME: HTTP 503 · Pippo');
   assert.equal(failed.detail, 'feeds.toast.changed: PFS', 'what did change is still said');
 });
+
+test('cached feeds past the heap\'s room are not loaded; the refresh brings smaller copies', async () => {
+  const feeds = await import('../app/state/feeds.js');
+  const { stableKey } = await import('../app/state/feed-format.js');
+  const kept = globalThis.__stubFiles;
+  const document = (id) => ({ version: 1, name: id, catalog: { id, name: id }, games: [
+    { id: 'PPSA10001', title: 'Sample', releases: [{ url: `https://example.com/${id}.exfat` }] }] });
+  const cache = (url, pad) => JSON.stringify({ url, hash: 'h', name: 'x', games: 1, pad: 'x'.repeat(pad), document: document(url.split('/').pop().replace('.jlx', '')) });
+  const [dlps, pippo, pfs] = feeds.CATALOG_FEEDS;
+  globalThis.__stubFiles = new Map([
+    [`/download0/JobeesLair/feeds/${stableKey(dlps)}.json`, cache(dlps, 2.5 * 1048576)],
+    [`/download0/JobeesLair/feeds/${stableKey(pippo)}.json`, cache(pippo, 1048576)],
+    [`/download0/JobeesLair/feeds/${stableKey(pfs)}.json`, cache(pfs, 1000)],
+  ]);
+  try {
+    const games = feeds.loadFeedGames();
+    assert.deepEqual(games.map(({ releases }) => releases[0].url), ['https://example.com/dlps.exfat', 'https://example.com/pfs.exfat'],
+      'the second big one waits; a small one after it still fits');
+  } finally {
+    globalThis.__stubFiles = kept;
+  }
+});

@@ -12,8 +12,11 @@ SHA-256 checksums.
   is not shown. The live catalog is
   now one feed per Pegasus catalog, built on our server by `tools/catalog/catalog-feeds.mjs`
   (`https://files.tupay.dev.br/jl/`), so every link keeps where it is listed; the same link in two catalogs is
-  one source with both. PFS is listed whole (every zstd and LZ4 link, Vikingfile ones too, for TorBox);
-  DLPSGame and Pippo bring the links the app does not bundle. Each source in the picker says its catalogs, a
+  one source with both. The four feeds share 1.2 MiB: every zstd and LZ4 link of every
+  catalog first (Vikingfile ones too, for TorBox), then the games the app does not bundle (newest first, with
+  their pictures), then links the app lacks for the games it bundles. (The catalogs whole, 4 MiB, ran the app's
+  64 MiB script heap out of memory on the PS5: no game page could read its links, and PFS, with the zstd links,
+  never loaded.) Cached feeds past 3 MiB together are not loaded at launch; the refresh replaces them. Each source in the picker says its catalogs, a
   ZSTD or LZ4 badge, and the catalog's notes (region, firmware, what to set in ShadowMount+); the game's page
   keeps only its description. Up to two feeds of your own (was three): the catalog feeds take the room.
 - **The catalog refresh says what it is doing.** A toast under the downloads' one names the catalog being fetched
