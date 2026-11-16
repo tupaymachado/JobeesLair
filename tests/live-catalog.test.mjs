@@ -88,7 +88,7 @@ test('the app reads the catalog feeds without the player adding them, and keeps 
   // upstream live catalog, which is no longer read.
   const source = readFileSync(new URL('../app/state/feeds.js', import.meta.url), 'utf8');
   assert.match(source, /CATALOG_HOME = "https:\/\/files\.tupay\.dev\.br\/jl\/"/);
-  assert.match(source, /CATALOG_IDS = \["dlps", "pippo", "pfs", "zer0"\]/);
+  assert.match(source, /CATALOG_IDS = \["pippo", "pfs", "zer0"\]/);
   assert.match(source, /allFeeds = \(\) => \[\.\.\.CATALOG_FEEDS,/);
   assert.match(source, /for \(const url of allFeeds\(\)\) \{\n\s+const cache = readCache/);
   assert.match(source, /const urls = allFeeds\(\);[\s\S]*?await refreshFeed\(url\)/);

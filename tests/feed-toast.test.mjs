@@ -20,16 +20,16 @@ test('a refresh tells its progress, then which catalogs changed and which failed
     await feeds.refreshFeeds();
     const n = feeds.CATALOG_FEEDS.length;
     assert.deepEqual(runs.slice(0, n).map((run) => [run.phase, run.done, run.total]), feeds.CATALOG_FEEDS.map((_, i) => ['running', i, n]));
-    assert.deepEqual(runs.slice(0, n).map((run) => run.name), ['DLPSGame', 'Pippo .exFAT', 'PFS', 'ZER0GAME'], 'named by catalog before any copy is kept');
+    assert.deepEqual(runs.slice(0, n).map((run) => run.name), ['Pippo .exFAT', 'PFS', 'ZER0GAME'], 'named by catalog before any copy is kept');
     const done = runs.at(-1);
     assert.equal(done.phase, 'done');
-    assert.deepEqual(done.changed, ['DLPSGame', 'Pippo .exFAT', 'PFS'], 'a first copy is a change');
+    assert.deepEqual(done.changed, ['Pippo .exFAT', 'PFS'], 'a first copy is a change');
     assert.deepEqual(done.failed, [{ name: 'ZER0GAME', error: 'HTTP 503' }]);
     assert.equal(feeds.feedRun(), done);
     // The same copies again: nothing changed (the cache already holds them), and the failure is still told.
     runs.length = 0;
     await feeds.refreshFeeds();
-    assert.deepEqual(runs.at(-1).changed, ['DLPSGame', 'Pippo .exFAT', 'PFS'], 'still not shown: this launch loaded none of them');
+    assert.deepEqual(runs.at(-1).changed, ['Pippo .exFAT', 'PFS'], 'still not shown: this launch loaded none of them');
   } finally {
     stop();
     globalThis.__stubFiles = kept.files;
@@ -64,15 +64,15 @@ test('cached feeds past the heap\'s room are not loaded; the refresh brings smal
   const document = (id) => ({ version: 1, name: id, catalog: { id, name: id }, games: [
     { id: 'PPSA10001', title: 'Sample', releases: [{ url: `https://example.com/${id}.exfat` }] }] });
   const cache = (url, pad) => JSON.stringify({ url, hash: 'h', name: 'x', games: 1, pad: 'x'.repeat(pad), document: document(url.split('/').pop().replace('.jlx', '')) });
-  const [dlps, pippo, pfs] = feeds.CATALOG_FEEDS;
+  const [pippo, pfs, zer0] = feeds.CATALOG_FEEDS;
   globalThis.__stubFiles = new Map([
-    [`/download0/JobeesLair/feeds/${stableKey(dlps)}.json`, cache(dlps, 2.5 * 1048576)],
-    [`/download0/JobeesLair/feeds/${stableKey(pippo)}.json`, cache(pippo, 1048576)],
-    [`/download0/JobeesLair/feeds/${stableKey(pfs)}.json`, cache(pfs, 1000)],
+    [`/download0/JobeesLair/feeds/${stableKey(pippo)}.json`, cache(pippo, 2.5 * 1048576)],
+    [`/download0/JobeesLair/feeds/${stableKey(pfs)}.json`, cache(pfs, 1048576)],
+    [`/download0/JobeesLair/feeds/${stableKey(zer0)}.json`, cache(zer0, 1000)],
   ]);
   try {
     const games = feeds.loadFeedGames();
-    assert.deepEqual(games.map(({ releases }) => releases[0].url), ['https://example.com/dlps.exfat', 'https://example.com/pfs.exfat'],
+    assert.deepEqual(games.map(({ releases }) => releases[0].url), ['https://example.com/pippo.exfat', 'https://example.com/zer0.exfat'],
       'the second big one waits; a small one after it still fits');
   } finally {
     globalThis.__stubFiles = kept;

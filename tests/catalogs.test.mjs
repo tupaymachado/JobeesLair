@@ -99,8 +99,8 @@ test('the store filters by catalog and by zstd/LZ4 format, bundled games and fee
   assert.deepEqual(zstd, ['PPSA01285', 'PPSA99001']);
   const pfs = catalog.filterGames(state({ catalog: ['pfs'] })).map((game) => game.id);
   assert.ok(pfs.includes('PPSA99001') && pfs.includes('PPSA01285'));
-  assert.ok(!catalog.filterGames(state({ catalog: ['dlps'] })).some((game) => game.id === 'PPSA99001'), 'a PFS-only game is not DLPS');
-  assert.ok(catalog.filterGames(state({ catalog: ['dlps'] })).length > 500, 'the bundled games carry their catalogs');
+  assert.ok(!catalog.filterGames(state({ catalog: ['pippo'] })).some((game) => game.id === 'PPSA99001'), 'a PFS-only game is not Pippo');
+  assert.ok(catalog.filterGames(state({ catalog: ['pippo'] })).length > 300, 'the bundled games carry their catalogs');
   assert.equal(catalog.facetLabel('catalog', 'pfs'), 'PFS');
   const plain = catalog.getGame('PPSA31246');
   assert.equal(plain.art.logo, 'https://image.api.playstation.com/x/l.png', 'a bundled game without a logo takes the feed\'s');

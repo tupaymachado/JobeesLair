@@ -36,10 +36,12 @@ const UA = 'JobeesLair-catalog-feeds (+https://github.com/tupaymachado/JobeesLai
 // A little under the app's limits for one feed (state/feed-format.js, state/feeds.js).
 const MAX_GAMES = 1450, MAX_LINKS = 5800, MAX_RELEASES = 64;
 // The room for every feed together, and for one (its refresh holds its text, its JSON and the parsed copy at once).
-const BUDGET = (Number(process.env.JL_FEEDS_MIB) || 1.2) * 1024 * 1024, FEED_BYTES = 0.6 * 1024 * 1024;
+const BUDGET = (Number(process.env.JL_FEEDS_MIB) || 2) * 1024 * 1024, FEED_BYTES = (Number(process.env.JL_FEED_MIB) || 1.1) * 1024 * 1024;
 const MAX_LOGOS = 400;
+// Catalogs not listed at all (DLPSGame: badly kept, its links mostly dead; the bundled data dropped it too).
+const LEFT_OUT = new Set((process.env.JL_LEFT_OUT ?? 'dlps').split(/[\s,]+/).filter(Boolean));
 // Links kept per game beyond its zstd and LZ4 ones: every build gets one before any build gets a second.
-const NEW_GAME_LINKS = 6, KNOWN_GAME_LINKS = 2;
+const NEW_GAME_LINKS = 16, KNOWN_GAME_LINKS = 6;
 const TITLE_ID = /^(?:CUSA|PPSA)\d{5}$/;
 
 async function fetchText(url, accept = 'application/json') {
@@ -433,7 +435,7 @@ async function main() {
 
   const loaded = [];
   for (const catalog of catalogs) {
-    if (!httpsURL(catalog.sourceUrl) || !/^[a-z0-9-]{1,24}$/.test(catalog.slug ?? '')) continue;
+    if (!httpsURL(catalog.sourceUrl) || !/^[a-z0-9-]{1,24}$/.test(catalog.slug ?? '') || LEFT_OUT.has(catalog.slug)) continue;
     try {
       loaded.push({ catalog, games: gamesOf(await getJSON(catalog.sourceUrl)) });
     } catch (error) {

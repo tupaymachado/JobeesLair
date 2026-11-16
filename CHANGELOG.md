@@ -6,6 +6,10 @@ SHA-256 checksums.
 
 ## Unreleased
 
+- **DLPSGame is gone.** Badly kept, its links mostly dead: it is out of the bundled data
+  (`tools/catalog/drop-catalog.mjs`: 12 496 links and the 1 136 games only it listed; 619 links other catalogs
+  list too stay, as theirs) and out of the catalog feeds. The store lists about 1 100 games, and Pippo, PFS and
+  ZER0GAME now come nearly whole (1.8 MiB together): every zstd and LZ4 link, every game the app lacks.
 - **Filter by catalog and by compression, as in Pegasus.** The store's filters open with **Catalog** (DLPSGame,
   Pippo .exFAT, PFS, ZER0GAME, Orbit, BlackBox, Archive.org), and **Format** offers **zstd** and **LZ4** (a game
   folder packed with them, as PFS publishes for 13.60; they count as 13.60 Ready). A filter with nothing to offer

@@ -29,7 +29,8 @@ import { FileSystem, Http } from '@ps5-react/core';
   // its catalog (`catalog: { id, name }`) so the store can filter by it and every link says where it is listed.
   // Every console reads them like feeds the player added, without being listed in Settings.
   var CATALOG_HOME = "https://files.tupay.dev.br/jl/";
-  var CATALOG_IDS = ["dlps", "pippo", "pfs", "zer0"];
+  // DLPSGame is left out (badly kept, its links mostly dead): tools/catalog/drop-catalog.mjs took it out of the bundled data too.
+  var CATALOG_IDS = ["pippo", "pfs", "zer0"];
   var CATALOG_FEEDS = CATALOG_IDS.map((id) => `${CATALOG_HOME}${id}.jlx`);
   var builtIn = (url) => CATALOG_FEEDS.includes(url);
   // The feeds read and refreshed: the catalog feeds first, then the player's.

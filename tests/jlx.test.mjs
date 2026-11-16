@@ -33,7 +33,7 @@ test('JLX1: any JSON comes back exactly, as printable ASCII with nothing readabl
 test('the bundled releases and the live catalog are JLX1, and the data folders hold no plain host link', () => {
   const dir = new URL('../app/data/releases/', import.meta.url);
   const names = readdirSync(dir).filter((name) => name.endsWith('.json'));
-  assert.ok(names.length > 2000);
+  assert.ok(names.length > 800); // MODIFIED (tupay): 871 since DLPSGame left (tools/catalog/drop-catalog.mjs)
   for (const name of names) {
     const text = readFileSync(new URL(name, dir), 'utf8');
     assert.ok(isJlx(text), `${name} is encoded`);
