@@ -13,28 +13,27 @@ import { useEffect, useState } from 'react';
 import { MAX_MIRRORS, feedDocument, parseFeed, parseFeedAsync, stableKey, stableKeyAsync } from './feed-format.js';
 import { isoStamp } from './clock.js';
 import { readJlxAsync } from './jlx.js';
-import { askListsHome, listsAddress, listsGone } from './lists-home.js';
 import { DATA_DIR, LEGACY_DATA_DIR } from './data-dir.js';
 import { webURL } from './download-sources.js';
+import { nameCatalog } from './catalogs.js';
 import { savedList } from './saved.js';
 import { FileSystem, Http } from '@ps5-react/core';
 
-  // The JS heap is 32 MiB for everything: a few modest feeds, each read whole. MODIFIED (0.5.1): the live
-  // catalog below takes one of the four places, so a player adds up to three of their own.
-  var MAX_FEEDS = 3, MAX_BYTES = 2 * 1024 * 1024;
-  // MODIFIED (0.5.1): the live catalog, built every few hours from the public Pegasus catalogs
-  // (tools/catalog/live-feed.mjs, .github/workflows/catalog-live.yml): games and links newer than this build's
-  // bundled catalog. Every console reads it like a feed the player added, without being listed in Settings,
-  // so a game added there shows up in the store the next time Jobee'sLair starts.
+  // The JS heap is 32 MiB for everything: a few modest feeds, each read whole. MODIFIED (tupay): the four catalog
+  // feeds below hold about as much as two full feeds, so a player adds up to two of their own (was three).
+  var MAX_FEEDS = 2, MAX_BYTES = 2 * 1024 * 1024;
+  // MODIFIED (0.5.1): the live catalog, built every few hours from the public Pegasus catalogs. LIVE_FEED stays its
+  // name (tests and old caches know it), but it is no longer read: the catalog feeds below replace it.
   var LIVE_FEED = "https://raw.githubusercontent.com/JVK3R/JobeesLair/main/catalog/live.json";
-  // MODIFIED (0.5.7): the live catalog is published as JLX1 (state/jlx.js), as ps5/live.jlx in a repository of its
-  // own, apart from the app's releases; live.json is gone. LIVE_FEED stays its name, so its release ids (and the
-  // downloads started from them) are the same as before. Its address is under the lists' home (state/lists-home.js):
-  // github.com/JVK3R/JobeesLair-Lists, or the place api.jobees.org names when that answers the file is not there.
-  var LIVE_PATH = "ps5/live.jlx";
-  var liveSource = () => listsAddress(LIVE_PATH);
-  // The feeds read and refreshed: the live catalog first, then the player's.
-  var allFeeds = () => [LIVE_FEED, ...feedList.get().filter((url) => url !== LIVE_FEED)];
+  // MODIFIED (tupay): one feed per Pegasus catalog (tools/catalog/catalog-feeds.mjs, run on our server), each naming
+  // its catalog (`catalog: { id, name }`) so the store can filter by it and every link says where it is listed.
+  // Every console reads them like feeds the player added, without being listed in Settings.
+  var CATALOG_HOME = "https://files.tupay.dev.br/jl/";
+  var CATALOG_IDS = ["dlps", "pippo", "pfs", "zer0"];
+  var CATALOG_FEEDS = CATALOG_IDS.map((id) => `${CATALOG_HOME}${id}.jlx`);
+  var builtIn = (url) => CATALOG_FEEDS.includes(url);
+  // The feeds read and refreshed: the catalog feeds first, then the player's.
+  var allFeeds = () => [...CATALOG_FEEDS, ...feedList.get().filter((url) => !builtIn(url))];
   var DIR = `${DATA_DIR}/feeds`;
   // Caches an earlier build left in the old data folder are read until the feed refreshes into this one.
   var LEGACY_DIR = `${LEGACY_DATA_DIR}/feeds`;
@@ -79,6 +78,7 @@ import { FileSystem, Http } from '@ps5-react/core';
         loaded.set(url, cache.hash);
         meta.set(url, summary(cache));
         setIndex(url, feed.games);
+        if (feed.catalog) nameCatalog(feed.catalog.id, feed.catalog.name);
         out.push(...feed.games);
         for (const [id, pair] of Object.entries(feed.ratings ?? {})) if (!feedRatings[id]) feedRatings[id] = pair;
       } catch (error2) {
@@ -124,7 +124,7 @@ import { FileSystem, Http } from '@ps5-react/core';
   var mirrorsOf = (url) => [...new Set([...userMirrors(url), ...meta.get(url)?.mirrors ?? []])].filter((mirror) => mirror !== url);
   // The addresses a refresh tries, in order: the one that worked last, the feed's own, then its mirrors.
   function sourcesOf(url) {
-    const all = [url === LIVE_FEED ? liveSource() : url, ...mirrorsOf(url)];
+    const all = [url, ...mirrorsOf(url)];
     const last = meta.get(url)?.from;
     return [...new Set(last && all.includes(last) ? [last, ...all] : all)];
   }
@@ -135,7 +135,7 @@ import { FileSystem, Http } from '@ps5-react/core';
     if (!inflight.has(url)) inflight.set(url, fetchFeed(url).finally(() => inflight.delete(url)));
     return inflight.get(url);
   }
-  var listed = (url) => url === LIVE_FEED || feedList.get().includes(url);
+  var listed = (url) => builtIn(url) || feedList.get().includes(url);
   // A refresh runs while the store or Settings is on screen, and checking a 2 MiB feed took the console's
   // interpreter about a second per feed in one piece: the screen stopped answering (Settings froze when
   // opened just after launch, when the feeds refresh, or on Refresh feeds). Its checking and hashing now
@@ -174,7 +174,7 @@ import { FileSystem, Http } from '@ps5-react/core';
     setStatus(url, { state: "refreshing" });
     try {
       const sources = sourcesOf(url);
-      let feed = null, from = null, gone = false;
+      let feed = null, from = null;
       const failures = [];
       for (const source of sources) {
         try {
@@ -183,18 +183,7 @@ import { FileSystem, Http } from '@ps5-react/core';
           break;
         } catch (error2) {
           failures.push(error2.message);
-          if (url === LIVE_FEED && source === liveSource() && listsGone(error2.status)) gone = true;
           console.log(`feeds: ${source} failed: ${error2.message}`);
-        }
-      }
-      // 0.5.7: the live catalog's file is not at its address: once, where the lists are now (state/lists-home.js).
-      if (!feed && gone && await askListsHome()) {
-        try {
-          from = liveSource();
-          feed = await fetchFrom(from, url);
-        } catch (error2) {
-          failures.push(error2.message);
-          console.log(`feeds: ${from} failed: ${error2.message}`);
         }
       }
       if (!feed) throw new Error(failures.length > 1 ? `${failures[0]} (${failures.length - 1} mirror${failures.length > 2 ? "s" : ""} also failed)` : failures[0]);
@@ -244,7 +233,7 @@ import { FileSystem, Http } from '@ps5-react/core';
   function addFeed(value) {
     const url = checkURL(value);
     const urls = feedList.get();
-    if (urls.includes(url) || url === LIVE_FEED) throw new Error("That feed is already added.");
+    if (urls.includes(url) || builtIn(url)) throw new Error("That feed is already added.");
     if (urls.length >= MAX_FEEDS) throw new Error(`Up to ${MAX_FEEDS} feeds. Remove one first.`);
     feedList.set([...urls, url]);
     void refreshFeed(url);
@@ -302,7 +291,7 @@ import { FileSystem, Http } from '@ps5-react/core';
       void refreshFeed(url);
       return;
     }
-    if (urls.includes(url) || url === LIVE_FEED) throw new Error("That feed is already added.");
+    if (urls.includes(url) || builtIn(url)) throw new Error("That feed is already added.");
     feedList.set(urls.map((item, at) => at === index ? url : item));
     const mine = userMirrors(from).filter((mirror) => mirror !== url);
     const next = { ...mirrorStore.get() };
@@ -357,4 +346,4 @@ import { FileSystem, Http } from '@ps5-react/core';
     return feedsSnapshot(urls);
   }
 
-export { LIVE_FEED, MAX_FEEDS, MAX_MIRRORS, addFeed, addMirror, feedIndexVersion, feedIndexes, feedRatings, feedsSnapshot, loadFeedGames, refreshFeeds, removeFeed, removeMirror, replaceFeed, subscribeFeeds, useFeeds };
+export { CATALOG_FEEDS, LIVE_FEED, MAX_FEEDS, MAX_MIRRORS, addFeed, addMirror, feedIndexVersion, feedIndexes, feedRatings, feedsSnapshot, loadFeedGames, refreshFeeds, removeFeed, removeMirror, replaceFeed, subscribeFeeds, useFeeds };

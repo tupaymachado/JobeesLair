@@ -328,6 +328,8 @@
   "filters.facet.genre": "ঘরানা",
   "filters.facet.platform": "প্ল্যাটফর্ম",
   "filters.facet.provider": "ডাউনলোড হোস্ট",
+  "filters.facet.catalog": "ক্যাটালগ",
+  "filters.facet.compression": "সংকোচন",
   "filters.facet.release": "রিলিজ",
   "filters.facet.size": "আকার",
   "filters.favorites": "প্রিয়",

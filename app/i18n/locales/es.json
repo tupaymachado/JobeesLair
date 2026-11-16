@@ -328,6 +328,8 @@
   "filters.facet.genre": "Género",
   "filters.facet.platform": "Plataforma",
   "filters.facet.provider": "Host de descarga",
+  "filters.facet.catalog": "Catálogo",
+  "filters.facet.compression": "Compresión",
   "filters.facet.release": "Lanzamiento",
   "filters.facet.size": "Tamaño",
   "filters.favorites": "Favoritos",

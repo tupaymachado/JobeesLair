@@ -9,7 +9,7 @@
   var EDITION = "store";
   var HOMEBREW_ONLY = EDITION === "homebrew";
   var EDITIONS = {
-    store: { titleId: "PPSA99471", repo: "JVK3R/JobeesLair", image: "JobeesLair.exfat", name: "Jobee'sLair" },
+    store: { titleId: "PPSA99471", repo: "tupaymachado/JobeesLair", image: "JobeesLair.exfat", name: "Jobee'sLair" },
     homebrew: { titleId: "PPSA99472", repo: "JVK3R/JobeesLair-Homebrew", image: "JobeesLair-Homebrew.exfat", name: "Jobee'sLair Homebrew" }
   };
 

@@ -3,6 +3,7 @@
 // MODIFIED: Vikingfile is a browser source again (its file link captured from the console's browser), and a
 // browser source ranks by how captures on its host fare on this console (state/capture-hosts.js).
 
+import { catalogName } from '../state/catalogs.js';
 import { activeService, serviceName } from '../state/debrid.js';
 import { t } from '../i18n/core.js';
 import { hostStanding } from '../state/capture-hosts.js';
@@ -75,6 +76,8 @@ import { formatBytes } from '../state/size.js';
     const speed = SPEED[release.provider.toLowerCase()];
     const detail2 = [
       host,
+      // MODIFIED (tupay): the catalogs that list it (state/catalogs.js).
+      release.catalogs?.length ? release.catalogs.map(catalogName).join(" + ") : null,
       release.debrid ? t("debrid.via").replace("TorBox", serviceName(release.debrid.service)) : null,
       isBackport(release) ? t("sources.role.backport") : isDlc(release) ? t("sources.role.dlc") : null,
       parts ? t("sources.parts", { count: parts }) : null,
@@ -86,6 +89,9 @@ import { formatBytes } from '../state/size.js';
       host,
       size: release.sizeBytes ? formatBytes(release.sizeBytes) : null,
       group,
+      // MODIFIED (tupay): how it is packed and its catalog's technical notes (region, firmware, notes).
+      compression: release.compression ?? null,
+      notes: release.details ?? null,
       reason: release.unavailableReason ?? null
     };
   }

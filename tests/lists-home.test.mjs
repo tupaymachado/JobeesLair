@@ -76,40 +76,27 @@ test('the lists home: no answer, a refusal or a bad address leaves the lists whe
   }
 });
 
-test('the live catalog: GitHub answers 404, api.jobees.org names the new home, and the catalog is read from there', async () => {
+test('the catalog feeds are read from our server alone: the lists home is not asked for them', async () => {
+  // MODIFIED (tupay): the PS5 live catalog moved off the lists home (state/feeds.js CATALOG_FEEDS); the PS4 lists
+  // still use it.
   const core = await import('@ps5-react/core');
   const feeds = await load('app/state/feeds.js');
   const keptFiles = globalThis.__stubFiles, keptRequest = core.Http.request;
   globalThis.__stubFiles = new Map();
   home.forgetListsHome();
-  const feed = encodeJlx(JSON.stringify({ version: 1, name: 'Live', games: [
-    { id: 'PPSA10000', title: 'Sample Game', releases: [{ name: 'Sample Game v1.00', url: 'https://example.com/files/0/game.exfat' }] }] }));
-  let githubAnswers = 404;
+  const feed = encodeJlx(JSON.stringify({ version: 1, name: 'PFS', catalog: { id: 'pfs', name: 'PFS' }, games: [
+    { id: 'PPSA10000', title: 'Sample Game', releases: [{ url: 'https://example.com/files/0/game.exfat' }] }] }));
   const asked = [];
   core.Http.request = async (url) => {
     asked.push(url);
-    if (url === `${GITHUB}ps5/live.jlx`) return { ok: false, status: githubAnswers, headers: {}, text: async () => '' };
-    if (url === WHERE) return { ok: true, status: 200, headers: {}, text: async () => JSON.stringify({ base: MOVED }) };
-    if (url === `${MOVED}ps5/live.jlx`) return { ok: true, status: 200, headers: { etag: '"m1"' }, text: async () => feed };
+    if (feeds.CATALOG_FEEDS.includes(url)) return { ok: true, status: 200, headers: { etag: '"c1"' }, text: async () => feed };
     return { ok: false, status: 404, headers: {}, text: async () => '' };
   };
   try {
     await feeds.refreshFeeds();
-    assert.deepEqual(asked, [`${GITHUB}ps5/live.jlx`, WHERE, `${MOVED}ps5/live.jlx`]);
-    assert.equal(feeds.feedsSnapshot([feeds.LIVE_FEED])[0].state, 'ok');
-    assert.equal(JSON.parse(globalThis.__stubFiles.get(SAVED)).base, MOVED);
-    // The next refresh goes straight to the new home.
-    asked.length = 0;
-    await feeds.refreshFeeds();
-    assert.deepEqual(asked, [`${MOVED}ps5/live.jlx`]);
-    // GitHub having trouble (500) is not a move: api.jobees.org is not asked.
-    globalThis.__stubFiles = new Map();
-    home.forgetListsHome();
-    githubAnswers = 500;
-    asked.length = 0;
-    await feeds.refreshFeeds();
-    assert.deepEqual(asked, [`${GITHUB}ps5/live.jlx`]);
-    assert.equal(feeds.feedsSnapshot([feeds.LIVE_FEED])[0].state, 'failed');
+    assert.deepEqual(asked, feeds.CATALOG_FEEDS);
+    for (const url of feeds.CATALOG_FEEDS) assert.equal(feeds.feedsSnapshot([url])[0].state, 'ok');
+    assert.equal(globalThis.__stubFiles.has(SAVED), false, 'no lists home kept');
   } finally {
     globalThis.__stubFiles = keptFiles;
     core.Http.request = keptRequest;

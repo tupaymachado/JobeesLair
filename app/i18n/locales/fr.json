@@ -328,6 +328,8 @@
   "filters.facet.genre": "Genre",
   "filters.facet.platform": "Plateforme",
   "filters.facet.provider": "Serveur",
+  "filters.facet.catalog": "Catalogue",
+  "filters.facet.compression": "Compression",
   "filters.facet.release": "Sortie",
   "filters.facet.size": "Taille",
   "filters.favorites": "Favoris",

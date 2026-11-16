@@ -328,6 +328,8 @@
   "filters.facet.genre": "ジャンル",
   "filters.facet.platform": "プラットフォーム",
   "filters.facet.provider": "ダウンロードホスト",
+  "filters.facet.catalog": "カタログ",
+  "filters.facet.compression": "圧縮",
   "filters.facet.release": "発売時期",
   "filters.facet.size": "サイズ",
   "filters.favorites": "お気に入り",

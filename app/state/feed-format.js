@@ -87,8 +87,24 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
       return "";
     }
   }
+  // MODIFIED (tupay): how a release is packed, for the Compression filter: what the feed says, else its label's
+  // words ("zstd · Data", "LZ4 · Viki").
+  var COMPRESSIONS = ["zstd", "lz4"];
+  function compressionOf(raw, label) {
+    if (COMPRESSIONS.includes(raw.compression)) return raw.compression;
+    if (/\bzstd\b|\bzst\b/i.test(label)) return "zstd";
+    if (/\blz4\b/i.test(label)) return "lz4";
+    return null;
+  }
+  // MODIFIED (tupay): the catalog a feed is (`catalog: { id, name }`, tools/catalog/catalog-feeds.mjs), or null.
+  function catalogOf(value) {
+    if (!value || typeof value !== "object") return null;
+    const id = text(value.id, 24).toLowerCase();
+    if (!/^[a-z0-9-]{1,24}$/.test(id)) return null;
+    return { id, name: text(value.name, 60) || id };
+  }
   var usableFilename = (name) => Boolean(name) && name.length <= 160 && !/[\/\\\x00-\x1f\x7f]/.test(name) && name !== "." && !name.includes("..");
-  function release(raw, gameId, index, feedKey) {
+  function release(raw, gameId, index, feedKey, catalog) {
     if (!raw || typeof raw !== "object") return null;
     // 0.5.1: a magnet link too (a torrent, downloaded through the gamer's debrid service).
     const magnet = typeof raw.url === "string" && isMagnetLink(raw.url.trim()) ? raw.url.trim() : null;
@@ -121,6 +137,13 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
     };
     const volume = text(raw.volume, 40);
     if (volume) record.volume = volume;
+    // MODIFIED (tupay): the catalogs that list it (more join when another feed or the bundled data has the same
+    // link: state/release-cache.js), how it is packed, and its technical notes ("Region: USA · Firmware: 10.xx+").
+    if (catalog) record.catalogs = [catalog.id];
+    const compression = compressionOf(raw, label);
+    if (compression) record.compression = compression;
+    const details = text(raw.details, 300);
+    if (details) record.details = details;
     const password = text(raw.archivePassword, 256);
     if (password) record.archivePassword = password;
     if (typeof raw.sha256 === "string" && /^[0-9a-f]{64}$/i.test(raw.sha256)) record.sha256 = raw.sha256.toLowerCase();
@@ -144,12 +167,12 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
     return out;
   }
   // One feed game: its catalog record, its page (about, shots, summary) and its release records.
-  function game(raw, feedKey) {
+  function game(raw, feedKey, catalog) {
     if (!raw || typeof raw !== "object") return null;
     const id = text(raw.id, 9).toUpperCase();
     const title = text(raw.title);
     if (!TITLE_ID.test(id) || !title) return null;
-    const releases = list(raw.releases, MAX_RELEASES, (item, index) => release(item, id, index, feedKey));
+    const releases = list(raw.releases, MAX_RELEASES, (item, index) => release(item, id, index, feedKey, catalog));
     if (!releases.length) return null;
     const releaseDate = typeof raw.releaseDate === "string" && DATE.test(raw.releaseDate) ? raw.releaseDate : "";
     const bytes = releases.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
@@ -159,6 +182,9 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
       platform: raw.platform === "ps4" || raw.platform === "ps5" ? raw.platform : id.startsWith("PPSA") ? "ps5" : "ps4",
       providers: [...new Set(releases.map((item) => isMagnetLink(item.url) ? "torrent" : hostName(item.url)))],
       direct: releases.some(direct),
+      // MODIFIED (tupay): for the Catalog and Compression filters (state/catalog.js).
+      ...catalog ? { catalogs: [catalog.id] } : {},
+      compressions: [...new Set(releases.map((item) => item.compression).filter(Boolean))],
       developer: text(raw.developer, 120),
       publisher: text(raw.publisher, 120),
       releaseDate,
@@ -240,7 +266,9 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
         if (!known.about.length) known.about = game2.about;
       }
     }
-    return { version: 1, name: document2.name, games: [...byId.values()] };
+    // MODIFIED (tupay): a Pegasus catalog is a catalog of its own for the Catalog filter, named as it names itself.
+    const name = text(document2.name, 60);
+    return { version: 1, name: document2.name, ...name ? { catalog: { id: slug(name).slice(0, 24) || "pegasus", name } } : {}, games: [...byId.values()] };
   }
   // The feed at `url`, validated: its name, games, and how many entries were dropped. Throws when the
   // document is not a feed at all.
@@ -251,6 +279,7 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
     if (!document2 || typeof document2 !== "object" || document2.version !== 1 || !Array.isArray(document2.games))
       throw new Error("Not a catalog feed: expected version 1 with a games list.");
     const key = stableKey(url);
+    const catalog = catalogOf(document2.catalog);
     const games2 = [];
     const seen = /* @__PURE__ */ new Set();
     const offered = document2.games.slice(0, MAX_GAMES);
@@ -258,7 +287,7 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
     let done = 0;
     for (const raw of offered) {
       if (releases >= MAX_TOTAL_RELEASES) break; // the rest count as skipped
-      const item = game(raw, key);
+      const item = game(raw, key, catalog);
       if (item && !seen.has(item.game.id)) {
         seen.add(item.game.id);
         item.releases = item.releases.slice(0, MAX_TOTAL_RELEASES - releases);
@@ -269,7 +298,7 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
     }
     // Addresses the publisher says the same feed is also served from, tried when this one is down.
     const mirrors = [...new Set(list(document2.mirrors, 16, httpURL))].filter((mirror) => mirror !== url).slice(0, MAX_MIRRORS);
-    return { name: text(document2.name, 80) || webURL(url).host, games: games2, skipped: offered.length - games2.length, mirrors, ratings: ratingsOf(document2.ratings) };
+    return { name: text(document2.name, 80) || webURL(url).host, catalog, games: games2, skipped: offered.length - games2.length, mirrors, ratings: ratingsOf(document2.ratings) };
   }
   // 0.5.1: a feed's store ratings, { "PPSA21564": [4.77, 76635] }: any title's, listed in the feed or not (the
   // live catalog rates every game the app has). Up to MAX_RATINGS, stars 1-5 and a whole count.
@@ -294,10 +323,11 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
   // The same, with the screen's frames in between: a refresh while the store or Settings is open.
   var parseFeedAsync = (document2, url, pause) => finishPaced(feedSteps(document2, url, PARSE_BATCH), pause);
   // A parsed feed back in feed form, as the cache stores it: what parseFeed gives for it is the same feed.
-  function feedDocument({ name, games: games2, mirrors = [], ratings = {} }) {
+  function feedDocument({ name, catalog, games: games2, mirrors = [], ratings = {} }) {
     return {
       version: 1,
       name,
+      ...catalog ? { catalog } : {},
       mirrors,
       ...Object.keys(ratings).length ? { ratings } : {},
       games: games2.map(({ game: record, page, releases }) => ({

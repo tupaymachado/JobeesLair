@@ -328,6 +328,8 @@
   "filters.facet.genre": "Genre",
   "filters.facet.platform": "Platform",
   "filters.facet.provider": "Host unduhan",
+  "filters.facet.catalog": "Katalog",
+  "filters.facet.compression": "Kompresi",
   "filters.facet.release": "Rilis",
   "filters.facet.size": "Ukuran",
   "filters.favorites": "Favorit",

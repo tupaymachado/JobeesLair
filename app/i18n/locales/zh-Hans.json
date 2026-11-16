@@ -328,6 +328,8 @@
   "filters.facet.genre": "类型",
   "filters.facet.platform": "平台",
   "filters.facet.provider": "下载主机",
+  "filters.facet.catalog": "目录",
+  "filters.facet.compression": "压缩",
   "filters.facet.release": "发行时间",
   "filters.facet.size": "大小",
   "filters.favorites": "收藏",

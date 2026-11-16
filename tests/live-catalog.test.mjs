@@ -83,14 +83,16 @@ test('every game has a picture: the bundled ones, and the ones only the live cat
   assert.deepEqual(live.filter((game) => !game.art.cover).map((game) => game.id), []);
 });
 
-test('the app reads the live catalog without the player adding it, and keeps a place for it', () => {
+test('the app reads the catalog feeds without the player adding them, and keeps two places for the player', () => {
+  // MODIFIED (tupay): one feed per Pegasus catalog from our server (tools/catalog/catalog-feeds.mjs) replaces the
+  // upstream live catalog, which is no longer read.
   const source = readFileSync(new URL('../app/state/feeds.js', import.meta.url), 'utf8');
-  assert.match(source, /LIVE_FEED = "https:\/\/raw\.githubusercontent\.com\/JVK3R\/JobeesLair\/main\/catalog\/live\.json"/, 'its name stays, so its release ids do');
-  assert.match(source, /LIVE_PATH = "ps5\/live\.jlx"/, 'fetched encoded');
-  assert.match(source, /liveSource = \(\) => listsAddress\(LIVE_PATH\)/, 'from the lists home (state/lists-home.js)');
+  assert.match(source, /CATALOG_HOME = "https:\/\/files\.tupay\.dev\.br\/jl\/"/);
+  assert.match(source, /CATALOG_IDS = \["dlps", "pippo", "pfs", "zer0"\]/);
+  assert.match(source, /allFeeds = \(\) => \[\.\.\.CATALOG_FEEDS,/);
   assert.match(source, /for \(const url of allFeeds\(\)\) \{\n\s+const cache = readCache/);
   assert.match(source, /for \(const url of allFeeds\(\)\) await refreshFeed\(url\)/);
-  assert.match(source, /MAX_FEEDS = 3/);
+  assert.match(source, /MAX_FEEDS = 2/);
 });
 
 // ---- 0.5.1 Pre Release 1: AkiraBox sets by their file names, Rootz without the browser, store ratings ----

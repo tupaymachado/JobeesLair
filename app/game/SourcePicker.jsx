@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { VersionFace } from './VersionSheet.jsx';
 import { captureStanding, describeSource, isCdnProvider, preferredRelease, sourceSections } from './sources.js';
 import { useT } from '../i18n/index.js';
+import { compressionName } from '../state/catalogs.js';
 import { getGame, readyLabel } from '../state/catalog.js';
 import { activeService, debridSupports, heldByTorBox, serviceName, useTorBoxInstant } from '../state/debrid.js';
 import { downloadQueue } from '../state/downloads.js';
@@ -81,6 +82,10 @@ import { FileSystem, Text, View, useIsFocused } from '@ps5-react/core';
   var PILL = { ink: colors.subtle, line: colors.line };
   // What a source is (release-sets.js releaseType), as a plain pill: Folder Dump, .exfat Image, FFPKG,
   // FFPFS Image, (PS4) Backport, FPKG. Nothing when it cannot be told before the download.
+  // MODIFIED (tupay): "ZSTD" / "LZ4", how the link is packed (state/catalogs.js), in the accent colour.
+  function compressionPill(compression) {
+    return compression ? { text: compressionName(compression).toUpperCase(), ink: colors.accent, line: colors.accent } : null;
+  }
   function typePill(t2, release) {
     const type = release.dumpType;
     if (type === "image") return { text: t2(`release.type.${release.imageFormat ?? "image"}`), ...PILL };
@@ -138,7 +143,7 @@ import { FileSystem, Text, View, useIsFocused } from '@ps5-react/core';
       }
     }, [gameId]);
   }
-  function RowFace({ icon, name, detail: detail2, size, recommended, current, cdn, badges = [], narrow = false }) {
+  function RowFace({ icon, name, detail: detail2, notes, size, recommended, current, cdn, badges = [], narrow = false }) {
     const t2 = useT();
     const focused = useIsFocused();
     const ink2 = focused ? colors.fg : colors.muted;
@@ -154,7 +159,9 @@ import { FileSystem, Text, View, useIsFocused } from '@ps5-react/core';
         // What it is, whether it runs on 13.60 and how its link stands, on a line of their own so a long name
         // never pushes them out of the row.
         badges.some(Boolean) ? /* @__PURE__ */ (0, jsx)(View, { style: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 }, children: badges.filter(Boolean).map((badge) => /* @__PURE__ */ (0, jsx)(View, { style: { borderRadius: radius.xs, borderWidth: 1, borderColor: badge.line, paddingHorizontal: 8, paddingVertical: 1 }, children: /* @__PURE__ */ (0, jsx)(Text, { style: { fontFamily: "Exo2", fontSize: 17, fontWeight: 600, color: badge.ink, lineHeight: 22 }, children: badge.text }) }, badge.text)) }) : null,
-        /* @__PURE__ */ (0, jsx)(Text, { style: [{ width: narrow ? 330 : 450, fontFamily: "Exo2", fontSize: 21, numberOfLines: 2, ellipsizeMode: "tail", lineHeight: 30 }, { color: ink2 }], children: detail2 || t2("sources.noDetails") })
+        /* @__PURE__ */ (0, jsx)(Text, { style: [{ width: narrow ? 330 : 450, fontFamily: "Exo2", fontSize: 21, numberOfLines: 2, ellipsizeMode: "tail", lineHeight: 30 }, { color: ink2 }], children: detail2 || t2("sources.noDetails") }),
+        // MODIFIED (tupay): the catalog's technical notes for this link (region, firmware, what to set), when it has any.
+        notes ? /* @__PURE__ */ (0, jsx)(Text, { style: { width: narrow ? 330 : 450, fontFamily: "Exo2", fontSize: 18, color: colors.subtle, numberOfLines: 2, ellipsizeMode: "tail", lineHeight: 24 }, children: notes }) : null
       ] }),
       /* @__PURE__ */ (0, jsx)(Text, { style: [{ width: narrow ? 96 : 108, fontFamily: "Exo2", fontSize: 21, textAlign: "end", lineHeight: 30 }, { color: ink2 }], children: size ?? "" }),
       /* @__PURE__ */ (0, jsx)(View, { style: { width: 27, alignItems: "flex-end" }, children: current ? /* @__PURE__ */ (0, jsx)(Icon, { name: "check", size: 18, color: colors.fg }) : null })
@@ -172,7 +179,7 @@ import { FileSystem, Text, View, useIsFocused } from '@ps5-react/core';
         note ? /* @__PURE__ */ (0, jsx)(Text, { style: { width: 660, fontFamily: "Exo2", fontSize: 21, color: colors.subtle, numberOfLines: 2, ellipsizeMode: "tail", lineHeight: 30 }, children: t2(note) }) : null
       ] }),
       items.map(({ release, index }, row) => {
-        const { name, detail: detail2, size, host } = describeSource(release);
+        const { name, detail: detail2, size, host, compression, notes } = describeSource(release);
         // A source that cannot be downloaded as listed (a set missing a part) stays in view, greyed, to say
         // why it is not offered; it cannot be picked. A link the check found gone is not one of these.
         const gone = group === "unavailable";
@@ -189,12 +196,13 @@ import { FileSystem, Text, View, useIsFocused } from '@ps5-react/core';
             icon,
             name,
             detail: gone ? deadDetail(t2, release, host) : rowDetail(t2, release, detail2, host, launches),
+            notes: gone ? null : notes,
             size,
             narrow: torbox,
             cdn: !gone && isCdnProvider(release.provider),
             recommended: !gone && index === recommended && group !== "browser" && release.linkHealth?.status !== "dead",
             current: !gone && index === selected,
-            badges: [typePill(t2, release), gone ? null : compatBadge(t2, release, launches), linkBadge(t2, release, group), gone ? null : captureBadge(t2, release), torbox || viaDebrid ? instantBadge(t2, release) : null]
+            badges: [compressionPill(compression), typePill(t2, release), gone ? null : compatBadge(t2, release, launches), linkBadge(t2, release, group), gone ? null : captureBadge(t2, release), torbox || viaDebrid ? instantBadge(t2, release) : null]
           }
         ) }, torbox ? "row" : release.id);
         if (!torbox) return face;

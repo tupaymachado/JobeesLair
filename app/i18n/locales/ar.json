@@ -328,6 +328,8 @@
   "filters.facet.genre": "الفئة",
   "filters.facet.platform": "المنصة",
   "filters.facet.provider": "مضيف التحميل",
+  "filters.facet.catalog": "الكتالوج",
+  "filters.facet.compression": "الضغط",
   "filters.facet.release": "الإصدار",
   "filters.facet.size": "الحجم",
   "filters.favorites": "المفضلات",

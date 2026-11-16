@@ -2551,24 +2551,26 @@ test('feeds: a copy the server tags with the ETag the cache has is not read, che
   let reads = 0, etag = '"v1"';
   core.Http.request = async () => ({ ok: true, status: 200, headers: { etag }, text: async () => { reads++; return body; } });
   try {
+    // MODIFIED (tupay): the four catalog feeds refresh every time, each with the same ETag here.
+    const n = feeds.CATALOG_FEEDS.length;
     await feeds.refreshFeeds();
-    assert.equal(reads, 1);
-    assert.equal(caches().length, 1);
+    assert.equal(reads, n);
+    assert.equal(caches().length, n);
     assert.equal(JSON.parse(caches()[0][1]).etag, '"v1"', 'the cache keeps the ETag');
     files.clear();
     await feeds.refreshFeeds();
-    assert.equal(reads, 1, 'the same copy is not read again');
+    assert.equal(reads, n, 'the same copy is not read again');
     assert.equal(caches().length, 0, 'nor written');
-    assert.equal(feeds.feedsSnapshot([feeds.LIVE_FEED])[0].state, 'ok');
+    assert.equal(feeds.feedsSnapshot([feeds.CATALOG_FEEDS[0]])[0].state, 'ok');
     etag = '"v2"';
     await feeds.refreshFeeds();
-    assert.equal(reads, 2, 'a new copy is read');
+    assert.equal(reads, 2 * n, 'a new copy is read');
     assert.equal(JSON.parse(caches()[0][1]).etag, '"v2"');
     // A weak ETag does not name one exact copy: every refresh reads it.
     etag = 'W/"v2"';
     await feeds.refreshFeeds();
     await feeds.refreshFeeds();
-    assert.equal(reads, 4);
+    assert.equal(reads, 4 * n);
   } finally {
     Object.assign(core.FileSystem, { writeFile: kept.writeFile, rename: kept.rename, mkdir: kept.mkdir });
     core.Http.request = kept.request;

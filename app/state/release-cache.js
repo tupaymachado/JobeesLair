@@ -6,6 +6,7 @@
 // compatible1360), the game's platform read from its title ID (PPSA is PS5, CUSA PS4).
 
 import { releaseSets, withReleaseTypes } from './release-sets.js';
+import { mergeReleases } from './catalogs.js';
 
   var KEPT2 = 6;
   function createReleaseCache(read) {
@@ -22,7 +23,8 @@ import { releaseSets, withReleaseTypes } from './release-sets.js';
         }
         if (!Array.isArray(parsed)) throw new Error("Invalid release data; rebuild the catalog.");
         const platform = /\/PPSA/i.test(file) ? "ps5" : /\/CUSA/i.test(file) ? "ps4" : void 0;
-        releases = withReleaseTypes(releaseSets([...parsed, ...extra]), platform);
+        // MODIFIED (tupay): one release per link, with every catalog that lists it (state/catalogs.js).
+        releases = withReleaseTypes(releaseSets(mergeReleases([...parsed, ...extra])), platform);
         if (games2.size === KEPT2) games2.delete(games2.keys().next().value);
       }
       games2.delete(file);

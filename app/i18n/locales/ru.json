@@ -328,6 +328,8 @@
   "filters.facet.genre": "Жанр",
   "filters.facet.platform": "Платформа",
   "filters.facet.provider": "Хост загрузок",
+  "filters.facet.catalog": "Каталог",
+  "filters.facet.compression": "Сжатие",
   "filters.facet.release": "Релиз",
   "filters.facet.size": "Размер",
   "filters.favorites": "Избранное",

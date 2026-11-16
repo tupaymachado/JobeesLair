@@ -328,6 +328,8 @@
   "filters.facet.genre": "صنف",
   "filters.facet.platform": "پلیٹ فارم",
   "filters.facet.provider": "ڈاؤن لوڈ میزبان",
+  "filters.facet.catalog": "کیٹلاگ",
+  "filters.facet.compression": "کمپریشن",
   "filters.facet.release": "جاری",
   "filters.facet.size": "سائز",
   "filters.favorites": "پسندیدہ",

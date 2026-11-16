@@ -6,6 +6,15 @@ SHA-256 checksums.
 
 ## Unreleased
 
+- **Filter by catalog and by compression, as in Pegasus.** The store's filters open with **Catalog** (DLPSGame,
+  Pippo .exFAT, PFS, ZER0GAME, Orbit, BlackBox, Archive.org) and **Compression** (zstd, LZ4). The live catalog is
+  now one feed per Pegasus catalog, built on our server by `tools/catalog/catalog-feeds.mjs`
+  (`https://files.tupay.dev.br/jl/`), so every link keeps where it is listed; the same link in two catalogs is
+  one source with both. PFS is listed whole (every zstd and LZ4 link, Vikingfile ones too, for TorBox);
+  DLPSGame and Pippo bring the links the app does not bundle. Each source in the picker says its catalogs, a
+  ZSTD or LZ4 badge, and the catalog's notes (region, firmware, what to set in ShadowMount+); the game's page
+  keeps only its description. Up to two feeds of your own (was three): the catalog feeds take the room.
+- **Updates come from this fork** (`tupaymachado/JobeesLair`), so an upstream release never replaces this build.
 - **Download from your own links.** **Downloads → Add links** takes one link or a whole list (typed on the
   console, or pasted on the phone companion's box): direct files, host pages and magnet links, through TorBox or
   AllDebrid when your key is set and the service takes them. Links whose names number them as the volumes of one

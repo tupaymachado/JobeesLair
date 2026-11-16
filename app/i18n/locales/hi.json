@@ -328,6 +328,8 @@
   "filters.facet.genre": "शैली",
   "filters.facet.platform": "प्लेटफॉर्म",
   "filters.facet.provider": "डाउनलोड होस्ट",
+  "filters.facet.catalog": "कैटलॉग",
+  "filters.facet.compression": "संपीड़न",
   "filters.facet.release": "रिलीज़",
   "filters.facet.size": "साइज़",
   "filters.favorites": "पसंदीदा",

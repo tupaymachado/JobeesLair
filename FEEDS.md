@@ -67,6 +67,13 @@ Only `version`, `games`, and for each game `id`, `title` and one release with a 
 Anything malformed is skipped, field by field and game by game; a game left with no usable release is
 dropped.
 
+### Catalog
+
+A feed may say which catalog it is: `"catalog": { "id": "pfs", "name": "PFS Catalog" }` (an id of up to 24
+lowercase letters, digits and dashes). The store's **Catalog** filter then lists it, and every source the feed
+brings says it. A link the app already has, or that another feed lists, becomes one source with every catalog
+that lists it. A Pegasus catalog added as a feed is a catalog of its own, named as it names itself.
+
 ### Game
 
 | Field | Meaning |
@@ -96,6 +103,8 @@ dropped.
 | `provider` | The host's name as shown; the URL's host when absent. |
 | `label` | The source's name in the source list. Volumes of one archive share a label but for `part 1`, `part 2`…, and are offered as one set. |
 | `record` | Groups volumes when labels alone don't (defaults to one record per game). |
+| `compression` | `zstd` or `lz4`, for the **Compression** filter and the source's badge; from the label's words ("zstd · Data") when absent. |
+| `details` | The source's technical notes, shown under it (up to 300 characters): "Region: USA · Firmware: 10.xx+". |
 | `archivePassword`, `volume`, `category` | As in the bundled catalog's release data. |
 
 Sources on retired hosts (Vikingfile, AkiraBox, and link pages that only lead to them) are dropped

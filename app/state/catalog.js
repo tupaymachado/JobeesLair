@@ -11,6 +11,8 @@
 
 import { features, games, twins } from '../data/catalog.js';
 import { formats as bundledFormats } from '../data/formats.js';
+import { catalogs as bundledCatalogs } from '../data/catalogs.js';
+import { catalogName, compressionName } from './catalogs.js';
 import { formatDate2, t } from '../i18n/core.js';
 import { createPageCache } from './page-cache.js';
 import { feedRatings, loadFeedGames } from './feeds.js';
@@ -120,8 +122,11 @@ import { PS4 } from './ps4.js';
     if (known) {
       known.providers = [.../* @__PURE__ */ new Set([...known.providers ?? [], ...feedGame.providers])];
       if (feedGame.direct) known.direct = true;
+      // MODIFIED (tupay): the catalogs and compressions every feed adds (the Catalog and Compression filters).
+      known.feedCatalogs = [.../* @__PURE__ */ new Set([...known.feedCatalogs ?? [], ...feedGame.catalogs ?? []])];
+      known.compressions = [.../* @__PURE__ */ new Set([...known.compressions ?? [], ...feedGame.compressions ?? []])];
     } else {
-      const entry = { ...feedGame, feedPage: page };
+      const entry = { ...feedGame, feedPage: page, feedCatalogs: feedGame.catalogs ?? [] };
       games.push(entry);
       catalogIds.set(feedGame.id, entry);
     }
@@ -141,6 +146,13 @@ import { PS4 } from './ps4.js';
     game.formats = fromFeed.length ? KINDS.filter((kind) => bundled.includes(kind) || fromFeed.includes(kind)) : bundled;
     // The PS4 installs packages; the disk images and folders are the PS5's ShadowMount's.
     if (PS4) game.formats = game.formats.filter((kind) => kind === "fpkg");
+  }
+  // MODIFIED (tupay): the catalogs that list each game (the bundled data's, then the feeds') and how its links are
+  // packed (the feeds say; the bundled data does not).
+  for (const game of entries) {
+    game.catalogs = [.../* @__PURE__ */ new Set([...bundledCatalogs[game.id]?.split(" ") ?? [], ...game.feedCatalogs ?? []])];
+    delete game.feedCatalogs;
+    game.compressions ??= [];
   }
   var editionsByWork = /* @__PURE__ */ new Map();
   for (const game of entries) if (game.work) editionsByWork.set(game.work, [...editionsByWork.get(game.work) ?? [], game]);
@@ -303,6 +315,19 @@ import { PS4 } from './ps4.js';
     },
     { key: "provider", any: true, options: hosts, has: (game, value) => game.providers?.includes(value) }
   ];
+  // MODIFIED (tupay): the catalog a game is listed in (DLPS, Pippo, PFS ... state/catalogs.js), most games first, and
+  // how its links are packed (zstd, LZ4), right after Platform: the Pegasus way of choosing a provider.
+  var countBy = (key) => {
+    const counts = /* @__PURE__ */ new Map();
+    for (const game of games) for (const value of game[key]) counts.set(value, (counts.get(value) ?? 0) + 1);
+    return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([value]) => value);
+  };
+  FACETS.splice(
+    1,
+    0,
+    { key: "catalog", any: true, options: countBy("catalogs").map((value) => ({ value, name: catalogName(value) })), has: (game, value) => game.catalogs.includes(value) },
+    { key: "compression", any: true, options: countBy("compressions").map((value) => ({ value, name: compressionName(value) })), has: (game, value) => game.compressions.includes(value) }
+  );
   var facetTitle = (key) => t(`filters.facet.${key}`);
   function optionLabel(option) {
     if (!option.label) return option.name;
