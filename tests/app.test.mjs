@@ -846,6 +846,41 @@ test('a set whose first part is a whole image is that image: placed in homebrew/
   assert.ok(!fs.exists('/data/downloads/sets/Game'), 'the set folder goes');
 });
 
+// MODIFIED (tupay): a growing .part is read off the render thread (Archives.inspectAsync): read there in line, behind
+// the download's writes, it held a PS5's screen for 132 s.
+test('a download in progress has its headers read off the render thread, never in line', async () => {
+  const fs = memoryFs();
+  const release = { id: 'set', provider: 'VikingFile', filename: 'Game', label: 'exFAT v01.000 Base', parts: [1, 2].map((number) => ({ number, sources: [{ url: `https://example.com/copy${number}`, sizeBytes: 900 }] })) };
+  // An engine that reports progress while its .part grows, as the console's does (a header check every 20 reports).
+  const downloads = { requests: [], enqueue(options) {
+    this.requests.push(options);
+    let listener = () => {};
+    fs.file(`${options.destination}.part`, 100);
+    const done = (async () => {
+      for (let i = 1; i <= 40; i++) {
+        await new Promise((resolve) => setImmediate(resolve));
+        listener({ written: i * 20, total: 900, received: i * 20, connections: 64, bytesPerSecond: 1 });
+      }
+      fs.remove(`${options.destination}.part`);
+      fs.file(options.destination, 900);
+      fs.file(`${options.destination}.complete`, 0, 'receipt');
+      return { written: 900, total: 900 };
+    })();
+    return { subscribe: (next) => { listener = next; return () => { listener = () => {}; }; }, done, cancel() {} };
+  } };
+  const inline = [], off = [];
+  const kind = (p) => ({ kind: /part-1\.bin(\.part)?$/.test(p) ? 'exfat' : '', refusal: '', title: '' });
+  const archives = { ...extractor(fs, {}),
+    inspect: ([p]) => { inline.push(p); return kind(p); },
+    inspectAsync: async ([p]) => { off.push(p); return kind(p); } };
+  const queue = queueWith({ fs, downloads, archives });
+  const job = await settle(queue, queue.enqueue(game, release, '/data'));
+  assert.equal(job.state, 'downloaded', job.error);
+  assert.deepEqual(inline.filter((p) => p.endsWith('.part')), [], 'no .part read in line');
+  assert.ok(off.some((p) => p.endsWith('part-1.bin.part')), 'the growing first part is checked off the render thread');
+  assert.deepEqual(job.artifact.images, ['/data/homebrew/PPSA01234.exfat']);
+});
+
 test('a leftover staged image blocks a new download of the same name', () => {
   const fs = memoryFs();
   fs.file('/data/downloads/images/Game.exfat', 1000);

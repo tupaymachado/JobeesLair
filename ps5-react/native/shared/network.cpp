@@ -547,7 +547,9 @@ bool configure_transport(void* handle, const std::string& url, bool follow_redir
   set(CURLOPT_ACCEPT_ENCODING, "identity");
   set(CURLOPT_USERAGENT, PS5_REACT_USER_AGENT);
   set(CURLOPT_CONNECTTIMEOUT, 10L);
-  set(CURLOPT_LOW_SPEED_LIMIT, 1L); set(CURLOPT_LOW_SPEED_TIME, 30L);
+  // MODIFIED (tupay): under 1 KiB/s for 30 s is a dead connection. At 1 byte/s, a TorBox server that sent 2 KB every
+  // 25 s held the last range of each part (under the 2 MiB a split needs) for minutes at 0 KB/s.
+  set(CURLOPT_LOW_SPEED_LIMIT, 1024L); set(CURLOPT_LOW_SPEED_TIME, 30L);
   set(CURLOPT_TCP_KEEPALIVE, 1L);
 #ifdef PROSPERO
   set(CURLOPT_IPRESOLVE, static_cast<long>(CURL_IPRESOLVE_V4));

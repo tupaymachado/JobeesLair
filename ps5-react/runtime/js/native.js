@@ -544,6 +544,22 @@ export const Archives = Object.freeze({
    * Also works on a download's growing `.part` file.
    * @param {string[]} sources ordered volumes @returns {{kind: string, refusal: string}} */
   inspect: sources => host().archives.inspect(sources),
+  /** MODIFIED (tupay): `inspect` on a thread of its own, for a file still downloading (a read there can wait
+   * long behind the download's writes, and `inspect` would hold the screen). Resolves to what `inspect` gives.
+   * @param {string[]} sources @returns {Promise<{kind: string, refusal: string, title: string}>} */
+  inspectAsync(sources) {
+    const archives = host().archives;
+    if (!archives.inspectStart) return Promise.resolve(archives.inspect(sources));
+    const id = archives.inspectStart(sources);
+    return new Promise((resolve) => {
+      const poll = () => {
+        const result = archives.inspectPoll(id);
+        if (result === null) setTimeout(poll, 100);
+        else resolve(result ?? { kind: '', refusal: '', title: '' });
+      };
+      setTimeout(poll, 20);
+    });
+  },
   /** ABI v24: a 7z's preflight before it downloads, on byte ranges fetched from its server (`Http.request` with a
    * Range header and `binary: true`). Ask with the ranges so far, starting from none: `need` is the range it reads
    * next, null once `refusal` is the answer; `size` is the archive's length its first 32 bytes give.

@@ -4,7 +4,12 @@
 #include "host_api.hpp"
 #include "archives.hpp"
 #include "archive_preflight.hpp"
+#include "worker_thread.hpp"
+#include <atomic>
 #include <climits>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 #include <cmath>
 #include <cstring>
 
@@ -75,6 +80,59 @@ JSValue inspect(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
   JS_SetPropertyStr(ctx,out,"kind",JS_NewString(ctx,inspection.kind.c_str()));
   JS_SetPropertyStr(ctx,out,"refusal",JS_NewString(ctx,inspection.refusal.c_str()));
   JS_SetPropertyStr(ctx,out,"title",JS_NewString(ctx,inspection.title.c_str()));
+  return out;
+}
+// MODIFIED (tupay): the same, off the render thread. A download's growing .part shares the drive with 64
+// connections writing to it, and a header read there waited 132 s on a PS5 (the screen held the whole time):
+// inspectStart(sources) returns an id at once, inspectPoll(id) returns null while it reads, then the result.
+struct Pending {
+  std::vector<std::string> sources;
+  archives::Inspection result;
+  std::atomic<bool> done{false};
+  WorkerThread worker;
+};
+std::mutex pending_guard;
+std::unordered_map<std::uint32_t, std::shared_ptr<Pending>> pending;
+std::uint32_t next_inspection = 1;
+constexpr std::size_t max_pending = 8;
+JSValue inspect_start(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  if (argc < 1 || !JS_IsArray(argv[0])) return JS_ThrowTypeError(ctx,"archives.inspectStart: expected sources");
+  const JSValue length_value = JS_GetPropertyStr(ctx,argv[0],"length"); std::uint32_t length = 0;
+  const int result = JS_ToUint32(ctx,&length,length_value); JS_FreeValue(ctx,length_value);
+  if (result || !length || length > 1024) return JS_ThrowTypeError(ctx,"archives.inspectStart: expected 1–1024 ordered volumes");
+  auto job = std::make_shared<Pending>();
+  for (std::uint32_t i = 0; i < length; ++i) {
+    const JSValue value = JS_GetPropertyUint32(ctx,argv[0],i); std::string file;
+    const bool ok = path(ctx,value,file); JS_FreeValue(ctx,value);
+    if (!ok) return JS_ThrowTypeError(ctx,"archives.inspectStart: source path is not allowed");
+    job->sources.push_back(std::move(file));
+  }
+  std::lock_guard lock(pending_guard);
+  if (pending.size() >= max_pending) return JS_ThrowPlainError(ctx,"archives.inspectStart: too many inspections running");
+  const auto id = next_inspection++;
+  Pending* raw = job.get();
+  if (!job->worker.start([raw] { raw->result = archives::inspect(raw->sources); raw->done = true; }, 2 * 1024 * 1024))
+    return JS_ThrowPlainError(ctx,"archives.inspectStart: cannot start its thread");
+  pending.emplace(id,std::move(job));
+  return JS_NewUint32(ctx,id);
+}
+JSValue inspect_poll(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv) {
+  std::uint32_t id = 0;
+  if (argc < 1 || JS_ToUint32(ctx,&id,argv[0])) return JS_ThrowTypeError(ctx,"archives.inspectPoll: expected an id");
+  std::shared_ptr<Pending> job;
+  {
+    std::lock_guard lock(pending_guard);
+    const auto found = pending.find(id);
+    if (found == pending.end()) return JS_UNDEFINED;
+    if (!found->second->done) return JS_NULL;
+    job = std::move(found->second);
+    pending.erase(found);
+  }
+  job->worker.join();
+  JSValue out = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx,out,"kind",JS_NewString(ctx,job->result.kind.c_str()));
+  JS_SetPropertyStr(ctx,out,"refusal",JS_NewString(ctx,job->result.refusal.c_str()));
+  JS_SetPropertyStr(ctx,out,"title",JS_NewString(ctx,job->result.title.c_str()));
   return out;
 }
 // A string of one character per byte (Http.request's `binary` body) as those bytes, at most `room` of them.
@@ -166,6 +224,8 @@ JSValue ps5_react_archive_api(JSContext* ctx) {
   JS_SetPropertyStr(ctx,api,"extract",JS_NewCFunction(ctx,extract,"extract",5));
   JS_SetPropertyStr(ctx,api,"inspect",JS_NewCFunction(ctx,inspect,"inspect",1));
   JS_SetPropertyStr(ctx,api,"inspectRanges",JS_NewCFunction(ctx,inspect_ranges,"inspectRanges",1));
+  JS_SetPropertyStr(ctx,api,"inspectStart",JS_NewCFunction(ctx,inspect_start,"inspectStart",1));
+  JS_SetPropertyStr(ctx,api,"inspectPoll",JS_NewCFunction(ctx,inspect_poll,"inspectPoll",1));
   JS_SetPropertyStr(ctx,api,"cancel",JS_NewCFunction(ctx,cancel,"cancel",1));
   JS_SetPropertyStr(ctx,api,"poll",JS_NewCFunction(ctx,poll,"poll",0));
   return api;

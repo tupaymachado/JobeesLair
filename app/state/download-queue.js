@@ -947,14 +947,24 @@ import { MARGIN2, spaceShortfall, stillNeeded } from './space.js';
       }
     }
     const inspections = /* @__PURE__ */ new WeakMap();
+    // MODIFIED (tupay): off the render thread (Archives.inspectAsync) where the runtime has it: reading the growing
+    // .part behind 64 connections' writes held a PS5's screen for 132 s at the start of a download.
+    var checking = /* @__PURE__ */ new WeakSet();
     function checkHeaders(job2, path, task) {
       const tries = inspections.get(job2) || 0;
-      if (job2.inspected || tries >= 3 || !archives?.inspect || !fs.exists(path)) return;
+      if (job2.inspected || checking.has(job2) || tries >= 3 || !archives?.inspect || !fs.exists(path)) return;
       inspections.set(job2, tries + 1);
       const started = Date.now();
-      const { kind, refusal, title } = archives.inspect([path]);
-      if (Date.now() - started > 250) console.log(`[download-queue] header check took ${Date.now() - started} ms`);
-      if (!kind) return;
+      const done = (inspection) => {
+        if (Date.now() - started > 250) console.log(`[download-queue] header check took ${Date.now() - started} ms`);
+        applyHeaders(job2, inspection, task);
+      };
+      if (!archives.inspectAsync) return done(archives.inspect([path]));
+      checking.add(job2);
+      archives.inspectAsync([path]).then(done, (error2) => console.log(`[download-queue] header check failed: ${error2.message}`)).finally(() => checking.delete(job2));
+    }
+    function applyHeaders(job2, { kind, refusal, title }, task) {
+      if (!kind || job2.inspected) return;
       job2.inspected = kind;
       noteTitle(job2, title);
       if (refusal) {
