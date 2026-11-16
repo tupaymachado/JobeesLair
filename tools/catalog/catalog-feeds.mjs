@@ -32,6 +32,7 @@ const STATE = join(OUT, 'state');
 const API = 'https://pegasus-dl.dev/api/catalogs';
 const UPSTREAM = 'https://raw.githubusercontent.com/JVK3R/JobeesLair-Lists/main/ps5/';
 const UA = 'JobeesLair-catalog-feeds (+https://github.com/tupaymachado/JobeesLair)';
+// Screenshots and whole descriptions only in a catalog that fits whole: in one that does not, the room goes to more games.
 // A little under the app's limits for one feed (state/feed-format.js, state/feeds.js).
 const MAX_GAMES = 1450, MAX_LINKS = 5800, MAX_BYTES = 1.9 * 1024 * 1024;
 // Links kept per game when a catalog does not fit whole: every build gets one before any build gets a second.
@@ -488,7 +489,7 @@ async function main() {
       const entry = {
         id: game.id,
         title: game.title,
-        ...(known ? {} : { art: artOf(game, art[game.id]), ...(art[game.id]?.shots?.length ? { shots: art[game.id].shots.map((url) => `${url}?w=1280&thumb=false`) } : {}), summary: game.about.slice(0, 2).join(' ').slice(0, 300), about: game.about, addedAt: firstSeen[game.id] ??= today }),
+        ...(known ? {} : { art: artOf(game, art[game.id]), ...(plan.whole && art[game.id]?.shots?.length ? { shots: art[game.id].shots.slice(0, 4).map((url) => `${url}?w=1280&thumb=false`) } : {}), summary: game.about.slice(0, 2).join(' ').slice(0, 300), about: plan.whole ? game.about : game.about.map((line) => line.slice(0, 300)), addedAt: firstSeen[game.id] ??= today }),
         releases,
       };
       const size = jlxSize(entry) + 1;
