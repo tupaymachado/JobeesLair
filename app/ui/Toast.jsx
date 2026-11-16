@@ -18,7 +18,10 @@ import { Text, View, motion } from '@ps5-react/core';
   var enter2 = { duration: 0.45, ease: EASE_OUT };
   var leave = { opacity: 0, x: 24, transition: { duration: 0.25, ease: "easeIn" } };
   var leaveRtl = { ...leave, x: -24 };
-  function Toast({ game, icon, status, title, action, detail: detail2, failed = false, duration, inPage = false }) {
+  // MODIFIED (tupay): `lower` puts it one toast further down, so the catalog refresh's (ui/FeedToast.jsx) never covers
+  // a download's.
+  var LOWER = 190;
+  function Toast({ game, icon, status, title, action, detail: detail2, failed = false, duration, inPage = false, lower = false }) {
     const { rtl } = useLocale();
     // Where pages start: under the announcements while they're up, so a toast never covers one; it glides with the
     // pages when they come or go. One in a page moves with its page.
@@ -27,7 +30,7 @@ import { Text, View, motion } from '@ps5-react/core';
     return /* @__PURE__ */ (0, jsx)(
       motion.View,
       {
-        style: [{ position: "absolute", zIndex: 50, width: 600 }, rtl ? { left: 48 } : { right: 48 }, inPage ? { top: 18 } : { top: 128 + glide.top }],
+        style: [{ position: "absolute", zIndex: 50, width: 600 }, rtl ? { left: 48 } : { right: 48 }, inPage ? { top: 18 } : { top: 128 + glide.top + (lower ? LOWER : 0) }],
         initial: { opacity: 0, x: rtl ? -40 : 40, y },
         animate: { opacity: 1, x: 0, y },
         transition: { ...enter2, y: glide.transition },

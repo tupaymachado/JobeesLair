@@ -16,6 +16,9 @@ SHA-256 checksums.
   DLPSGame and Pippo bring the links the app does not bundle. Each source in the picker says its catalogs, a
   ZSTD or LZ4 badge, and the catalog's notes (region, firmware, what to set in ShadowMount+); the game's page
   keeps only its description. Up to two feeds of your own (was three): the catalog feeds take the room.
+- **The catalog refresh says what it is doing.** A toast under the downloads' one names the catalog being fetched
+  (1/4, 2/4 ...), then says whether anything new came (shown when Jobee'sLair is reopened), or which catalogs
+  failed and why, the games already saved staying available.
 - **The carousel shows far more games.** It shows games with a banner and a logo; only the 275 bundled games with a
   Steam logo had one. The catalog feeds now bring each game's PlayStation Store logo (its proportions and whether
   it is dark worked out on the server), for the games they list and, beside the ratings, for every bundled game

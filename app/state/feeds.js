@@ -15,7 +15,7 @@ import { isoStamp } from './clock.js';
 import { readJlxAsync } from './jlx.js';
 import { DATA_DIR, LEGACY_DATA_DIR } from './data-dir.js';
 import { webURL } from './download-sources.js';
-import { nameCatalog } from './catalogs.js';
+import { catalogName, nameCatalog } from './catalogs.js';
 import { savedList } from './saved.js';
 import { FileSystem, Http } from '@ps5-react/core';
 
@@ -222,13 +222,39 @@ import { FileSystem, Http } from '@ps5-react/core';
     }
   }
   var refreshing = null;
+  // MODIFIED (tupay): what a whole refresh is doing, for the toast that says so (ui/FeedToast.jsx):
+  //   { phase: "running", done, total, name }  then  { phase: "done", total, changed: [names], failed: [{ name, error }] }
+  var runListeners = /* @__PURE__ */ new Set();
+  var lastRun = null;
+  function emitRun(run) {
+    lastRun = run;
+    for (const listener of runListeners) listener(run);
+  }
+  function subscribeFeedRun(listener) {
+    runListeners.add(listener);
+    return () => {
+      runListeners.delete(listener);
+    };
+  }
+  var feedRun = () => lastRun;
+  // A feed's name as the player knows it: its catalog's, the name it gives itself, else its host.
+  var feedName = (url) => builtIn(url) ? catalogName(CATALOG_IDS[CATALOG_FEEDS.indexOf(url)]) : meta.get(url)?.name ?? hostOf(url);
   // One refresh at a time, feed by feed: they share the console's connection with downloads.
   function refreshFeeds() {
     return refreshing ?? (refreshing = (async () => {
+      const urls = allFeeds();
+      const changed = [], failed = [];
       try {
-        for (const url of allFeeds()) await refreshFeed(url);
+        for (const [index, url] of urls.entries()) {
+          emitRun({ phase: "running", done: index, total: urls.length, name: feedName(url) });
+          await refreshFeed(url);
+          const state = status.get(url);
+          if (state?.state === "failed") failed.push({ name: feedName(url), error: state.error ?? "" });
+          else if (state?.changed) changed.push(feedName(url));
+        }
       } finally {
         refreshing = null;
+        emitRun({ phase: "done", total: urls.length, changed, failed });
       }
     })());
   }
@@ -349,4 +375,4 @@ import { FileSystem, Http } from '@ps5-react/core';
     return feedsSnapshot(urls);
   }
 
-export { CATALOG_FEEDS, LIVE_FEED, MAX_FEEDS, MAX_MIRRORS, addFeed, addMirror, feedIndexVersion, feedIndexes, feedLogos, feedRatings, feedsSnapshot, loadFeedGames, refreshFeeds, removeFeed, removeMirror, replaceFeed, subscribeFeeds, useFeeds };
+export { CATALOG_FEEDS, LIVE_FEED, MAX_FEEDS, MAX_MIRRORS, addFeed, addMirror, feedIndexVersion, feedIndexes, feedLogos, feedRatings, feedRun, feedsSnapshot, loadFeedGames, refreshFeeds, subscribeFeedRun, removeFeed, removeMirror, replaceFeed, subscribeFeeds, useFeeds };

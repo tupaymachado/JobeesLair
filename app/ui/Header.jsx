@@ -14,6 +14,7 @@ import { useIsImmersive, useNavActions, useNavState } from '../state/nav.jsx';
 import { useWishlist } from '../state/store.jsx';
 import { openUpdateDialog, useInstall, useUpdate } from '../state/update.js';
 import { ButtonGlyph } from './ButtonHints.jsx';
+import { FeedToast } from './FeedToast.jsx';
 import { DownloadToast } from './DownloadToast.jsx';
 import { DownloadsBadge } from './DownloadsBadge.jsx';
 import { FocusRing } from './FocusRing.jsx';
@@ -124,6 +125,8 @@ import { hb } from '../homebrew/palette.js';
     return /* @__PURE__ */ (0, jsxs)(FocusScope, { onAction, onBack, children: [
       children,
       /* @__PURE__ */ (0, jsx)(DownloadToast, { actionRef: toastAction }),
+      // MODIFIED (tupay): the catalog refresh's progress and result.
+      /* @__PURE__ */ (0, jsx)(FeedToast, {}),
       /* @__PURE__ */ (0, jsx)(QuickPreview, {}),
       // The island: one floating glass bar at the top, centered. Pages start under it, so it never
       // covers what scrolls (and the engine keeps copying scrolled pixels instead of repainting).

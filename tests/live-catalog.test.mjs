@@ -91,7 +91,7 @@ test('the app reads the catalog feeds without the player adding them, and keeps 
   assert.match(source, /CATALOG_IDS = \["dlps", "pippo", "pfs", "zer0"\]/);
   assert.match(source, /allFeeds = \(\) => \[\.\.\.CATALOG_FEEDS,/);
   assert.match(source, /for \(const url of allFeeds\(\)\) \{\n\s+const cache = readCache/);
-  assert.match(source, /for \(const url of allFeeds\(\)\) await refreshFeed\(url\)/);
+  assert.match(source, /const urls = allFeeds\(\);[\s\S]*?await refreshFeed\(url\)/);
   assert.match(source, /MAX_FEEDS = 2/);
 });
 
