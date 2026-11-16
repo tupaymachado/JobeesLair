@@ -68,6 +68,8 @@ import { FileSystem, Http } from '@ps5-react/core';
   // Every listed feed's cached games, validated again: { game, page, releases } as parseFeed gives them.
   // The store ratings the feeds carry (0.5.1), [stars, count] by title ID; the live catalog's first, as it is listed first.
   var feedRatings = {};
+  // MODIFIED (tupay): the store logos the feeds carry for games they do not list, { id: { logo, logoAspect, logoDark } }.
+  var feedLogos = {};
   function loadFeedGames() {
     const out = [];
     for (const url of allFeeds()) {
@@ -81,6 +83,7 @@ import { FileSystem, Http } from '@ps5-react/core';
         if (feed.catalog) nameCatalog(feed.catalog.id, feed.catalog.name);
         out.push(...feed.games);
         for (const [id, pair] of Object.entries(feed.ratings ?? {})) if (!feedRatings[id]) feedRatings[id] = pair;
+        for (const [id, art] of Object.entries(feed.logos ?? {})) if (!feedLogos[id]) feedLogos[id] = art;
       } catch (error2) {
         console.log(`feeds: cached ${url} unreadable: ${error2.message}`);
       }
@@ -346,4 +349,4 @@ import { FileSystem, Http } from '@ps5-react/core';
     return feedsSnapshot(urls);
   }
 
-export { CATALOG_FEEDS, LIVE_FEED, MAX_FEEDS, MAX_MIRRORS, addFeed, addMirror, feedIndexVersion, feedIndexes, feedRatings, feedsSnapshot, loadFeedGames, refreshFeeds, removeFeed, removeMirror, replaceFeed, subscribeFeeds, useFeeds };
+export { CATALOG_FEEDS, LIVE_FEED, MAX_FEEDS, MAX_MIRRORS, addFeed, addMirror, feedIndexVersion, feedIndexes, feedLogos, feedRatings, feedsSnapshot, loadFeedGames, refreshFeeds, removeFeed, removeMirror, replaceFeed, subscribeFeeds, useFeeds };

@@ -14,6 +14,10 @@ SHA-256 checksums.
   DLPSGame and Pippo bring the links the app does not bundle. Each source in the picker says its catalogs, a
   ZSTD or LZ4 badge, and the catalog's notes (region, firmware, what to set in ShadowMount+); the game's page
   keeps only its description. Up to two feeds of your own (was three): the catalog feeds take the room.
+- **The carousel shows far more games.** It shows games with a banner and a logo; only the 275 bundled games with a
+  Steam logo had one. The catalog feeds now bring each game's PlayStation Store logo (its proportions and whether
+  it is dark worked out on the server), for the games they list and, beside the ratings, for every bundled game
+  with none. New games from the feeds also bring the store's screenshots for their page.
 - **Updates come from this fork** (`tupaymachado/JobeesLair`), so an upstream release never replaces this build.
 - **Download from your own links.** **Downloads → Add links** takes one link or a whole list (typed on the
   console, or pasted on the phone companion's box): direct files, host pages and magnet links, through TorBox or

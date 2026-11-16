@@ -20,6 +20,7 @@
 
 import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -226,7 +227,9 @@ function pick(sets, max) {
 // The pictures of a game the app does not bundle, from the PlayStation Store (as live-feed.mjs).
 const STORE = (id) => `https://m.np.playstation.com/api/catalog/v2/titles/${id}_00/concepts?country=US&language=en&age=999`;
 const COVERS = ['MASTER', 'GAMEHUB_COVER_ART', 'PORTRAIT_BANNER'], BACKDROPS = ['BACKGROUND_LAYER_ART', 'SIXTEEN_BY_NINE_BANNER', 'FOUR_BY_THREE_BANNER'];
-const ART_RETRY_DAYS = 14, ART_PER_RUN = 400;
+const ART_RETRY_DAYS = 14, ART_PER_RUN = Number(process.env.JL_ART_PER_RUN) || 600;
+// v2: the store's logo (with its proportions and whether it is dark, logoInfo) and screenshots too.
+const ART_VERSION = 2;
 const STORE_IMAGE = /^https:\/\/image\.api\.playstation\.com\/[^?#\s"]+$/;
 async function storeArt(id) {
   try {
@@ -236,14 +239,79 @@ async function storeArt(id) {
     const images = (await response.json())?.[0]?.media?.images;
     if (!Array.isArray(images)) return { none: true };
     const of = (types) => types.flatMap((type) => images.filter((image) => image?.type === type && STORE_IMAGE.test(image.url)).map((image) => image.url));
-    const cover = [...new Set(of(COVERS))].slice(0, 3), hero = of(BACKDROPS)[0];
-    return cover.length || hero ? { cover, ...(hero ? { hero } : {}) } : { none: true };
+    const cover = [...new Set(of(COVERS))].slice(0, 3), hero = of(BACKDROPS)[0], logo = of(['LOGO'])[0], shots = of(['SCREENSHOT']).slice(0, 8);
+    if (!cover.length && !hero && !logo) return { none: true };
+    const out = { v: ART_VERSION, cover, ...(hero ? { hero } : {}), ...(shots.length ? { shots } : {}) };
+    if (logo) {
+      const info = await logoInfo(`${logo}?w=640`);
+      if (info) Object.assign(out, { logo, logoAspect: info.aspect, ...(info.dark ? { logoDark: true } : {}) });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+// A logo's proportions and whether it is dark (the app draws a dark one in the text colour, ui/GameLogo.jsx): a PNG
+// read here, 8 bits a channel, any colour type. null when it cannot be read (the logo is then left out).
+async function logoInfo(url) {
+  try {
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(20000) });
+    if (!response.ok) return null;
+    const png = Buffer.from(await response.arrayBuffer());
+    if (png.length > 8e6 || png.toString('latin1', 1, 4) !== 'PNG') return null;
+    let at = 8, width = 0, height = 0, depth = 0, type = 0, palette = null, alphas = null;
+    const data = [];
+    while (at + 8 <= png.length) {
+      const length = png.readUInt32BE(at), kind = png.toString('latin1', at + 4, at + 8), body = png.subarray(at + 8, at + 8 + length);
+      if (kind === 'IHDR') [width, height, depth, type] = [body.readUInt32BE(0), body.readUInt32BE(4), body[8], body[9]];
+      else if (kind === 'PLTE') palette = body;
+      else if (kind === 'tRNS') alphas = body;
+      else if (kind === 'IDAT') data.push(body);
+      else if (kind === 'IEND') break;
+      at += 12 + length;
+    }
+    if (!width || !height) return null;
+    const aspect = Math.round((width / height) * 1000) / 1000;
+    const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[type];
+    if (depth !== 8 || !channels || png.length && type === 3 && !palette) return { aspect, dark: false };
+    const raw = inflateSync(Buffer.concat(data));
+    const stride = width * channels;
+    let previous = Buffer.alloc(stride), sum = 0, weight = 0;
+    for (let y = 0; y < height; y++) {
+      const start = y * (stride + 1), filter = raw[start], line = Buffer.from(raw.subarray(start + 1, start + 1 + stride));
+      for (let x = 0; x < stride; x++) {
+        const a = x >= channels ? line[x - channels] : 0, b = previous[x], c = x >= channels ? previous[x - channels] : 0;
+        const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+        line[x] = (line[x] + [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][filter]) & 255;
+      }
+      for (let x = 0; x < width; x += 2) {
+        const i = x * channels;
+        let r, g, bl, alpha = 255;
+        if (type === 3) {
+          const k = line[i];
+          [r, g, bl] = [palette[k * 3], palette[k * 3 + 1], palette[k * 3 + 2]];
+          if (alphas && k < alphas.length) alpha = alphas[k];
+        } else if (type === 0 || type === 4) {
+          r = g = bl = line[i];
+          if (type === 4) alpha = line[i + 1];
+        } else {
+          [r, g, bl] = [line[i], line[i + 1], line[i + 2]];
+          if (type === 6) alpha = line[i + 3];
+        }
+        if (alpha < 128) continue;
+        sum += (0.2126 * r + 0.7152 * g + 0.0722 * bl) / 255;
+        weight++;
+      }
+      previous = line;
+    }
+    return { aspect, dark: weight > 0 && sum / weight < 0.3 };
   } catch {
     return null;
   }
 }
 async function readArt(ids, art, today) {
-  const stale = (entry) => !entry || entry.none && (Date.parse(today) - Date.parse(entry.at || 0)) / 864e5 >= ART_RETRY_DAYS;
+  const stale = (entry) => !entry || (entry.none ? (Date.parse(today) - Date.parse(entry.at || 0)) / 864e5 >= ART_RETRY_DAYS : entry.v !== ART_VERSION);
+  // New games first: a bundled game asked only for its logo waits behind them.
   const queue = [...new Set(ids)].filter((id) => stale(art[id])).slice(0, ART_PER_RUN);
   let asked = 0;
   const worker = async () => {
@@ -263,7 +331,19 @@ function artOf(game, store) {
     ...(covers.length ? { cover: covers[0] } : {}),
     ...(covers.length > 1 ? { coverFallbacks: covers.slice(1, 5) } : {}),
     ...(store?.hero ? { hero: `${store.hero}?w=1920&thumb=false` } : {}),
+    ...logoOf(store),
   };
+}
+// The store's logo, as the carousel and the game page draw it (ui/GameLogo.jsx), or nothing.
+const logoOf = (store) => (store?.logo ? { logo: `${store.logo}?w=640&thumb=false`, logoAspect: store.logoAspect, ...(store.logoDark ? { logoDark: true } : {}) } : {});
+// The bundled games with no logo of their own (app/data/catalog.js lists a game a line).
+function bundledWithoutLogo() {
+  const out = new Set();
+  for (const line of readFileSync(join(ROOT, 'app/data/catalog.js'), 'utf8').split('\n')) {
+    const id = /"id": "((?:CUSA|PPSA)\d{5})"/.exec(line)?.[1];
+    if (id && !line.includes('"logo":')) out.add(id);
+  }
+  return out;
 }
 
 const jlxSize = (value) => encodeJlx(value).length - 5;
@@ -372,7 +452,17 @@ async function main() {
   const wanted = plans.flatMap(({ chosen }) => chosen.slice(0, MAX_GAMES + 200)).flatMap(({ sets }) => sets).flatMap((set) => set.links.map((link) => link.url))
     .filter((url) => NAMED_HOST.test(new URL(url).host));
   const looked = await readNames(wanted, names);
-  const asked = await readArt(plans.flatMap(({ chosen }) => chosen.slice(0, MAX_GAMES + 200)).map(({ game }) => game.id).filter((id) => !bundledIds.has(id)), art, today);
+  const noLogo = bundledWithoutLogo();
+  const asked = await readArt([
+    ...plans.flatMap(({ chosen }) => chosen.slice(0, MAX_GAMES + 200)).map(({ game }) => game.id).filter((id) => !bundledIds.has(id)),
+    ...[...noLogo].filter((id) => id.startsWith('PPSA')),
+    ...[...noLogo].filter((id) => !id.startsWith('PPSA')),
+  ], art, today);
+  // The store logos of bundled games that have none, for the carousel: { id: [url, aspect, dark] }, on the smallest feed.
+  const logos = Object.fromEntries([...noLogo].filter((id) => art[id]?.logo).map((id) => {
+    const logo = logoOf(art[id]);
+    return [id, [logo.logo, logo.logoAspect, logo.logoDark ? 1 : 0]];
+  }));
 
   // The ratings ride on the smallest feed: every console reads every feed.
   const smallest = plans.reduce((best, plan) => (!best || plan.links < best.links ? plan : best), null);
@@ -381,8 +471,9 @@ async function main() {
   for (const plan of plans) {
     const { catalog } = plan;
     const withRatings = plan === smallest ? ratings : {};
+    const withLogos = plan === smallest ? logos : {};
     const out = [];
-    let links = 0, bytes = 300 + jlxSize(withRatings), regrouped = 0;
+    let links = 0, bytes = 300 + jlxSize(withRatings) + jlxSize(withLogos), regrouped = 0;
     for (const { game, sets } of plan.chosen) {
       if (out.length >= MAX_GAMES || links >= MAX_LINKS) break;
       const known = bundledIds.has(game.id);
@@ -397,7 +488,7 @@ async function main() {
       const entry = {
         id: game.id,
         title: game.title,
-        ...(known ? {} : { art: artOf(game, art[game.id]), summary: game.about.slice(0, 2).join(' ').slice(0, 300), about: game.about, addedAt: firstSeen[game.id] ??= today }),
+        ...(known ? {} : { art: artOf(game, art[game.id]), ...(art[game.id]?.shots?.length ? { shots: art[game.id].shots.map((url) => `${url}?w=1280&thumb=false`) } : {}), summary: game.about.slice(0, 2).join(' ').slice(0, 300), about: game.about, addedAt: firstSeen[game.id] ??= today }),
         releases,
       };
       const size = jlxSize(entry) + 1;
@@ -407,7 +498,7 @@ async function main() {
       out.push(entry);
     }
     const name = clip(catalog.name, 60) || catalog.slug;
-    const feed = { version: 1, name, catalog: { id: catalog.slug, name }, source: 'pegasus-dl.dev', ...(Object.keys(withRatings).length ? { ratings: withRatings } : {}), games: out };
+    const feed = { version: 1, name, catalog: { id: catalog.slug, name }, source: 'pegasus-dl.dev', ...(Object.keys(withRatings).length ? { ratings: withRatings } : {}), ...(Object.keys(withLogos).length ? { logos: withLogos } : {}), games: out };
     writeAtomic(join(OUT, `${catalog.slug}.jlx`), `${encodeJlx(feed)}\n`);
     const left = plan.chosen.length - out.length;
     index.push({ id: catalog.slug, name, file: `${catalog.slug}.jlx`, games: out.length, links, whole: plan.whole && !left, updatedAt: new Date().toISOString() });
@@ -417,7 +508,7 @@ async function main() {
   writeAtomic(join(STATE, 'names.jlx'), `${encodeJlx(Object.fromEntries(Object.entries(names).sort()))}\n`);
   writeAtomic(join(STATE, 'first-seen.json'), `${JSON.stringify(Object.fromEntries(Object.entries(firstSeen).sort()), null, 1)}\n`);
   writeAtomic(join(STATE, 'art.json'), `{\n${Object.entries(art).sort(([a], [b]) => a.localeCompare(b)).map(([id, entry]) => `${JSON.stringify(id)}:${JSON.stringify(entry)}`).join(',\n')}\n}\n`);
-  console.log(`ratings: ${Object.keys(ratings).length}; host pages read: ${looked}; store art asked: ${asked}`);
+  console.log(`ratings: ${Object.keys(ratings).length}; logos for bundled games: ${Object.keys(logos).length}; host pages read: ${looked}; store art asked: ${asked}`);
 }
 
 main().catch((error) => {

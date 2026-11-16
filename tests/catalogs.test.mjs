@@ -82,6 +82,7 @@ test('the store filters by catalog and by compression, bundled games and feed ga
   // PPSA01285 is bundled and listed by PFS among others; the feed adds a zstd link to it.
   feed.games.push(parseFeed({ version: 1, name: 'x', catalog: { id: 'pfs', name: 'PFS Catalog' }, games: [
     { id: 'PPSA01285', title: 'Known', releases: [{ url: 'https://datanodes.to/known', label: 'zstd · Data' }] }] }, url).games[0]);
+  feed.logos = { PPSA31246: { logo: 'https://image.api.playstation.com/x/l.png', logoAspect: 2, logoDark: true } };
   const document = feedDocument(feed);
   globalThis.__stubFiles = new Map([[`/download0/JobeesLair/feeds/${stableKey(url)}.json`, JSON.stringify({ url, hash: 'h', name: feed.name, games: feed.games.length, document })]]);
   const catalog = await import('../app/state/catalog.js');
@@ -98,4 +99,20 @@ test('the store filters by catalog and by compression, bundled games and feed ga
   assert.ok(catalog.filterGames(state({ catalog: ['dlps'] })).length > 500, 'the bundled games carry their catalogs');
   assert.equal(catalog.facetLabel('catalog', 'pfs'), 'PFS');
   assert.equal(catalog.facetLabel('compression', 'lz4'), 'LZ4');
+  const plain = catalog.getGame('PPSA31246');
+  assert.equal(plain.art.logo, 'https://image.api.playstation.com/x/l.png', 'a bundled game without a logo takes the feed\'s');
+  assert.equal(plain.art.logoAspect, 2);
+  assert.equal(plain.art.logoDark, true);
+  assert.match(catalog.getGame('PPSA01285').art.logo, /steamstatic/, 'one with its own keeps it');
+});
+
+test('a feed brings store logos: in a game\'s art, and for games it does not list', () => {
+  const LOGO = 'https://image.api.playstation.com/vulcan/x/logo.png?w=640&thumb=false';
+  const feed = parseFeed({ ...pfsFeed(), logos: {
+    PPSA01285: [LOGO, 2.5, 1], PPSA00001: [LOGO, 99, 0], CUSA00002: ['javascript:x', 2, 0], bad: [LOGO, 2, 0], PPSA00003: 'x' },
+    games: [{ ...pfsFeed().games[0], art: { cover: LOGO, logo: LOGO, logoAspect: 3.1, logoDark: false } }] }, PFS);
+  assert.deepEqual(feed.games[0].game.art, { cover: LOGO, logo: LOGO, logoAspect: 3.1 });
+  assert.deepEqual(feed.logos, { PPSA01285: { logo: LOGO, logoAspect: 2.5, logoDark: true }, PPSA00001: { logo: LOGO } });
+  const again = parseFeed(JSON.parse(JSON.stringify(feedDocument(feed))), PFS);
+  assert.deepEqual(again.logos, feed.logos, 'the cache keeps them');
 });

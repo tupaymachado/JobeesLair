@@ -15,7 +15,7 @@ import { catalogs as bundledCatalogs } from '../data/catalogs.js';
 import { catalogName, compressionName } from './catalogs.js';
 import { formatDate2, t } from '../i18n/core.js';
 import { createPageCache } from './page-cache.js';
-import { feedRatings, loadFeedGames } from './feeds.js';
+import { feedLogos, feedRatings, loadFeedGames } from './feeds.js';
 import { ratings as bundledRatings } from '../data/ratings.js';
 import { createReleaseCache } from './release-cache.js';
 import { readJlx } from './jlx.js';
@@ -134,6 +134,8 @@ import { PS4 } from './ps4.js';
   var entries = [...games, ...twins];
   var _a;
   for (const game of entries) {
+    // MODIFIED (tupay): a game with no logo of its own takes the store's from the feeds (the carousel shows logos).
+    if (!game.art.logo && feedLogos[game.id]) game.art = { ...game.art, ...feedLogos[game.id] };
     Object.setPrototypeOf(game, game.feedPage ? FeedEntry : Entry);
     game.genres = [...new Set(game.genres.flatMap((genre) => genre.split(" / ")).map((genre) => SYNONYMS[genre] ?? genre))];
     (_a = game.art).cover && (_a.cover = coverSize(game.art.cover));

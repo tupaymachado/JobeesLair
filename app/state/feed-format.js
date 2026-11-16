@@ -164,6 +164,30 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
     const fallbacks = list(raw?.coverFallbacks, 4, httpURL);
     if (fallbacks.length) out.coverFallbacks = fallbacks;
     if (typeof raw?.tint === "string" && /^#[0-9a-f]{6}$/i.test(raw.tint)) out.tint = raw.tint;
+    // MODIFIED (tupay): the game's logo (the carousel and the game page draw it, ui/GameLogo.jsx), its width over
+    // its height, and whether it is dark (drawn in the text colour).
+    Object.assign(out, logoArt(raw?.logo, raw?.logoAspect, raw?.logoDark));
+    return out;
+  }
+  function logoArt(url, aspect, dark) {
+    const logo = httpURL(url);
+    if (!logo) return {};
+    return { logo, ...typeof aspect === "number" && aspect >= 0.2 && aspect <= 20 ? { logoAspect: aspect } : {}, ...dark === true || dark === 1 ? { logoDark: true } : {} };
+  }
+  // MODIFIED (tupay): logos for games the feed does not list (the bundled ones without one), { "PPSA01234": [url,
+  // aspect, dark] }, like the ratings. Up to MAX_RATINGS.
+  function logosOf(value) {
+    const out = {};
+    if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+    let kept = 0;
+    for (const [id, entry] of Object.entries(value)) {
+      if (kept >= MAX_RATINGS) break;
+      if (!TITLE.test(id) || !Array.isArray(entry)) continue;
+      const art2 = logoArt(entry[0], entry[1], entry[2]);
+      if (!art2.logo) continue;
+      out[id] = art2;
+      kept++;
+    }
     return out;
   }
   // One feed game: its catalog record, its page (about, shots, summary) and its release records.
@@ -298,7 +322,7 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
     }
     // Addresses the publisher says the same feed is also served from, tried when this one is down.
     const mirrors = [...new Set(list(document2.mirrors, 16, httpURL))].filter((mirror) => mirror !== url).slice(0, MAX_MIRRORS);
-    return { name: text(document2.name, 80) || webURL(url).host, catalog, games: games2, skipped: offered.length - games2.length, mirrors, ratings: ratingsOf(document2.ratings) };
+    return { name: text(document2.name, 80) || webURL(url).host, catalog, games: games2, skipped: offered.length - games2.length, mirrors, ratings: ratingsOf(document2.ratings), logos: logosOf(document2.logos) };
   }
   // 0.5.1: a feed's store ratings, { "PPSA21564": [4.77, 76635] }: any title's, listed in the feed or not (the
   // live catalog rates every game the app has). Up to MAX_RATINGS, stars 1-5 and a whole count.
@@ -323,13 +347,14 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
   // The same, with the screen's frames in between: a refresh while the store or Settings is open.
   var parseFeedAsync = (document2, url, pause) => finishPaced(feedSteps(document2, url, PARSE_BATCH), pause);
   // A parsed feed back in feed form, as the cache stores it: what parseFeed gives for it is the same feed.
-  function feedDocument({ name, catalog, games: games2, mirrors = [], ratings = {} }) {
+  function feedDocument({ name, catalog, games: games2, mirrors = [], ratings = {}, logos = {} }) {
     return {
       version: 1,
       name,
       ...catalog ? { catalog } : {},
       mirrors,
       ...Object.keys(ratings).length ? { ratings } : {},
+      ...Object.keys(logos).length ? { logos: Object.fromEntries(Object.entries(logos).map(([id, art2]) => [id, [art2.logo, art2.logoAspect ?? null, art2.logoDark ? 1 : 0]])) } : {},
       games: games2.map(({ game: record, page, releases }) => ({
         ...record,
         ...page,
