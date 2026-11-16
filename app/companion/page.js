@@ -11,7 +11,7 @@
 //     the queue, homebrew progress, announcements and notices as they change (LocalServer.push). Without a
 //     stream (an old browser, the stream dropped) it asks every two seconds, as before, and reconnects.
 //   - Tabs: Home, Games, Homebrew, Downloads, Remote; Library (with Fix it) and catalog feeds open from Home.
-//     Downloads clears finished ones and cancels all; a game's sources each download on their own; a homebrew
+//     Downloads takes pasted links (MODIFIED, tupay), clears finished ones and cancels all; a game's sources each download on their own; a homebrew
 //     app can be removed (keeping what it saved, or not) and its helper run; the remote has Triangle, Square,
 //     L2 and R2. The console's announcements show under the header.
 //   - The look follows the store and jobees.org: flat panels, small corners, no capsules or glows, labels in
@@ -294,6 +294,12 @@ a.btn{text-decoration:none}
 </section>
 <section id="downloads" class="view" hidden>
 <h2 class="label" style="margin-top:6px"><span style="margin:0;color:var(--fg);font-size:17px;font-weight:700" data-s="phone.tab.downloads"></span><span id="jobCount"></span></h2>
+<div class="panel block" id="linksBox" style="margin:0 0 12px"><b data-s="phone.links.title"></b><p class="subtle" style="margin:4px 0 10px" data-s="phone.links.note"></p>
+<textarea class="field ltr" id="linksText" rows="4" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://&hellip;" style="width:100%;min-height:92px;resize:vertical"></textarea>
+<div class="actions" style="margin-top:10px"><button class="btn primary" id="linksSend" data-s="phone.links.send"></button></div>
+<div id="linksChoice" hidden><p style="margin:12px 0 4px"><b id="linksChoiceTitle"></b></p><p class="subtle" style="margin:0 0 10px" data-s="phone.links.choiceNote"></p>
+<div class="actions"><button class="btn primary" id="linksParts" data-s="phone.links.asParts"></button><button class="btn" id="linksEach" data-s="phone.links.asEach"></button></div></div>
+<div class="error" id="linksError" role="alert"></div></div>
 <div class="actions" id="bulk" style="margin:0 0 12px" hidden><button class="btn small" id="clearFinished" data-s="phone.downloads.clearFinished"></button><button class="btn small danger" id="cancelAll" data-s="phone.downloads.cancelAll"></button></div>
 <div id="jobs"></div>
 <h2 class="label"><span style="margin:0;color:var(--fg);font-size:17px;font-weight:700" data-s="phone.storage.title"></span></h2>
@@ -1027,6 +1033,30 @@ a.btn{text-decoration:none}
     b.dataset.sure = ""; b.textContent = s("phone.downloads.cancelAll"); buzz();
     api("POST", "/api/queue/cancel-all").then(function (d) { toast(s("phone.downloads.cancelling", { count: d.cancelling })); if (!live) setTimeout(loadQueue, 800); }).catch(function (e) { toast(e.message, true); });
   };
+  // MODIFIED (tupay): links pasted here go to the console's queue (POST /api/links), as Downloads → Add links there.
+  function sendLinks(looseAs) {
+    var text = $("linksText").value.trim();
+    $("linksError").textContent = "";
+    if (!text) return;
+    buzz();
+    var buttons = [$("linksSend"), $("linksParts"), $("linksEach")];
+    buttons.forEach(function (b) { b.disabled = true; });
+    api("POST", "/api/links", looseAs ? { text: text, looseAs: looseAs } : { text: text }).then(function (d) {
+      if (d.asking) {
+        $("linksChoiceTitle").textContent = s("phone.links.choice", { count: d.loose });
+        $("linksChoice").hidden = false;
+        return;
+      }
+      $("linksChoice").hidden = true;
+      if (d.queued.length) { $("linksText").value = ""; toast(s("phone.links.added", { count: d.queued.length })); }
+      if (d.failed.length) $("linksError").textContent = d.failed.map(function (f) { return f.title + ": " + f.error; }).join(" · ");
+      if (!live) loadQueue();
+    }).catch(function (e) { $("linksError").textContent = e.message; }).then(function () { buttons.forEach(function (b) { b.disabled = false; }); });
+  }
+  $("linksSend").onclick = function () { sendLinks(null); };
+  $("linksParts").onclick = function () { sendLinks("set"); };
+  $("linksEach").onclick = function () { sendLinks("each"); };
+  $("linksText").oninput = function () { $("linksChoice").hidden = true; $("linksError").textContent = ""; };
   function renderDrives(list, drives) {
     list.textContent = "";
     if (!drives.length) { list.appendChild(el("p", "muted", s("phone.storage.none"))); return; }

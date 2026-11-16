@@ -41,7 +41,7 @@ import { companionEvents, createCompanionApi } from './api.js';
 import { logger } from '../services/logger.js';
 import { pageFor } from './page.js';
 import { pressRemote, runShortcut } from './remote.js';
-import { startRemoteDownload, throughDebrid } from './remote-download.js';
+import { startRemoteDownload, startRemoteLinks, throughDebrid } from './remote-download.js';
 import { homebrew } from '../state/homebrew-store.js';
 import { catalogFor, getLocale, subscribe as onLanguage, t } from '../i18n/core.js';
 import { activeService, debridSnapshot, debridStatus, serviceName, setAllDebridKey, setTorBoxKey, testAllDebrid, testTorBox } from '../state/debrid.js';
@@ -69,6 +69,7 @@ import { createLive } from './live.js';
     describe: describeSource,
     releasesOf: (game) => linkHealth().overlay(game.releases),
     download: startRemoteDownload,
+    links: startRemoteLinks,
     queue: () => downloadQueue().snapshot().filter((job) => !job.cleared),
     // 0.5.4: the console's Library, and announcements as the bar under its top menu shows them.
     library: { list: libraryList, fix: fixEntry },

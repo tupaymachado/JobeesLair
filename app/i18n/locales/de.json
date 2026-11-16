@@ -1404,5 +1404,13 @@
   "phone.game.playersHere": "{started} von {all} auf deiner Firmware",
   "whatsNew.players": "Startet es bei anderen?",
   "whatsNew.playersDetail": "Die Details eines Spiels zeigen, auf wie vielen Konsolen von Spielern es gestartet ist, und wie vielen auf deiner Firmware.",
-  "diagnosis.frozeTip": "Es ist eingefroren: Das Spiel reagierte nicht mehr, und die Konsole hat es geschlossen, als sie es nicht pausieren konnte. Es wurde richtig installiert, das Einfrieren kommt also von den eigenen Dateien des Spiels, nicht vom Download oder von ShadowMount. Ein anderer Download davon auf seiner Seite läuft vielleicht."
+  "diagnosis.frozeTip": "Es ist eingefroren: Das Spiel reagierte nicht mehr, und die Konsole hat es geschlossen, als sie es nicht pausieren konnte. Es wurde richtig installiert, das Einfrieren kommt also von den eigenen Dateien des Spiels, nicht vom Download oder von ShadowMount. Ein anderer Download davon auf seiner Seite läuft vielleicht.",
+  "phone.links.title": "Links senden",
+  "phone.links.note": "Füge einen oder mehrere Links ein: Dateien, Hoster-Seiten oder Magnet-Links. Die Teile eines Archivs (.part1.rar, .r00, .7z.001) werden ein Download, über TorBox oder AllDebrid, wenn ein Schlüssel gesetzt ist.",
+  "phone.links.send": "An die Konsole senden",
+  "phone.links.added": "{count, plural, one {# Download auf der Konsole hinzugefügt.} other {# Downloads auf der Konsole hinzugefügt.}}",
+  "phone.links.choice": "{count, plural, one {# Link} other {# Links}}: eine Datei in Teilen?",
+  "phone.links.choiceNote": "Ihre Namen sagen es nicht. Sind es die Teile eines Archivs, in der eingefügten Reihenfolge, werden sie ein Download.",
+  "phone.links.asParts": "Teile einer Datei",
+  "phone.links.asEach": "Einzelne Downloads"
 }

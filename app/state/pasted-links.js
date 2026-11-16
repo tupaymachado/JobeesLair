@@ -154,4 +154,16 @@
     });
   }
 
-export { MAX_LINKS, linkName, parseLinks, pastedDownloads, planLinks, volumeOf };
+// MODIFIED (tupay): what a paste sent from the phone becomes (companion/remote-download.js startRemoteLinks): the
+// queue's items, or `asking` when several links' names say nothing and no `looseAs` says how to take them.
+function pastedText(text, { looseAs = null, debrid = null } = {}) {
+  const links = parseLinks(text);
+  if (!links.length) throw new Error("No link found: send http(s) or magnet links.");
+  const plan = planLinks(links);
+  const problem = plan.downloads.find((item) => item.problem)?.problem;
+  if (problem) throw new Error(problem);
+  if (plan.loose.length > 1 && looseAs !== "set" && looseAs !== "each") return { asking: true, loose: plan.loose.length, links: links.length };
+  return { items: pastedDownloads(plan, { looseAs: looseAs ?? "each", debrid }) };
+}
+
+export { MAX_LINKS, linkName, parseLinks, pastedDownloads, pastedText, planLinks, volumeOf };

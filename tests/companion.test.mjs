@@ -528,3 +528,30 @@ test('companion: /api/typing/close closes the box asking unanswered; gone or mal
   assert.deepEqual(closed, ['t2']);
   assert.equal(world().call('POST', '/api/typing/close', { id: 't2' }).status, 404, 'a console without it');
 });
+
+// MODIFIED (tupay): links pasted on the phone go to the console's queue (POST /api/links).
+test('companion: pasted links go to the console, and several nameless ones ask how to take them', async () => {
+  const sent = [];
+  const { call } = world({ links: (text, options) => {
+    sent.push([text, options.looseAs]);
+    if (text === 'bad') throw new Error('Part 2 of x is missing.');
+    return { queued: [{ title: 'x', parts: 2, debrid: 'TorBox' }], failed: [], root: '/data' };
+  } });
+  const ok = call('POST', '/api/links', { text: 'https://a/x.part1.rar https://a/x.part2.rar', looseAs: 'set' });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.body.queued, [{ title: 'x', parts: 2, debrid: 'TorBox' }]);
+  assert.deepEqual(sent[0], ['https://a/x.part1.rar https://a/x.part2.rar', 'set']);
+  assert.equal(call('POST', '/api/links', { text: 'bad' }).status, 409);
+  assert.equal(call('POST', '/api/links', {}).status, 400);
+  assert.equal(sent[1][1], null, 'no choice sent: null');
+
+  const { pastedText } = await import('../app/state/pasted-links.js');
+  assert.throws(() => pastedText('nothing here'), /No link found/);
+  assert.deepEqual(pastedText('https://vikingfile.com/f/aaa https://vikingfile.com/f/bbb'), { asking: true, loose: 2, links: 2 },
+    'two links whose names say nothing: the phone asks before anything is queued');
+  assert.equal(pastedText('https://vikingfile.com/f/aaa https://vikingfile.com/f/bbb', { looseAs: 'set' }).items[0].release.parts.length, 2);
+  assert.equal(pastedText('https://vikingfile.com/f/aaa https://vikingfile.com/f/bbb', { looseAs: 'each' }).items.length, 2);
+  const set = pastedText('https://h.com/Wolverine.part1.rar https://h.com/Wolverine.part2.rar').items;
+  assert.deepEqual([set.length, set[0].release.parts.length], [1, 2], 'numbered volumes are one download in parts');
+  assert.throws(() => pastedText('https://h/x.part1.rar https://h/x.part3.rar'), /Part 2 of x is missing/);
+});

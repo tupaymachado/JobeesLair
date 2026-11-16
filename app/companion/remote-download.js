@@ -11,6 +11,8 @@ import { debridSource, debridSupports, serviceName } from '../state/debrid.js';
 import { downloadQueue, freeBytes, storageRoots } from '../state/downloads.js';
 import { linkHealth } from '../state/links.js';
 import { MARGIN2 } from '../state/space.js';
+import { rememberDrive, startingDrive } from '../state/last-drive.js';
+import { pastedText } from '../state/pasted-links.js';
 
   // Whether `release` can go through the debrid service set up now (only one the app cannot fetch on its own).
   var throughDebrid = (release) => ["browser", "torrent"].includes(describeSource(release).group) && debridSupports(release);
@@ -38,4 +40,34 @@ import { MARGIN2 } from '../state/space.js';
     return { id, source: host, root: roots[index], debrid: viaDebrid ? serviceName(release.debrid.service) : null, browser: group === "browser" && !viaDebrid };
   }
 
-export { startRemoteDownload, throughDebrid };
+
+// MODIFIED (tupay): links sent from the phone (POST /api/links), as Downloads → Add links takes them on the console
+// (state/pasted-links.js): volumes their names number become one download in parts, a debrid key set up takes what
+// its service supports. Several links whose names say nothing need `looseAs` ("set": the parts of one file, in the
+// order sent; "each": a download each); without it the answer asks (`loose`) and nothing is queued.
+function startRemoteLinks(text, { looseAs = null } = {}) {
+  const planned = pastedText(text, { looseAs, debrid: { supports: debridSupports, source: debridSource } });
+  if (planned.asking) return planned;
+  const items = planned.items;
+  let roots;
+  try {
+    roots = storageRoots();
+  } catch {
+    roots = ["/data"];
+  }
+  if (!roots.length) throw new Error("No drive to download to.");
+  const root = roots[startingDrive(roots, (candidate) => (freeBytes(candidate) ?? 0) > 0)];
+  const queued = [], failed = [];
+  for (const { game, release, viaDebrid } of items) {
+    try {
+      downloadQueue().enqueue(game, release, root);
+      queued.push({ title: game.title, parts: release.parts?.length ?? 1, debrid: viaDebrid ? serviceName(release.debrid?.service) : null });
+    } catch (error) {
+      failed.push({ title: game.title, error: error.message });
+    }
+  }
+  if (queued.length) rememberDrive(root);
+  return { queued, failed, root };
+}
+
+export { startRemoteDownload, startRemoteLinks, throughDebrid };

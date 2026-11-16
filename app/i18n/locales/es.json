@@ -1404,5 +1404,13 @@
   "phone.game.playersHere": "{started} de {all} en tu firmware",
   "whatsNew.players": "¿Arranca a otros?",
   "whatsNew.playersDetail": "Los detalles de un juego dicen en cuántas consolas de jugadores arrancó, y en cuántas con tu firmware.",
-  "diagnosis.frozeTip": "Se congeló: el juego dejó de responder y la consola lo cerró al no poder pausarlo. Se instaló bien, así que el fallo viene de los propios archivos del juego, no de la descarga ni de ShadowMount. Otra descarga desde su página puede funcionar."
+  "diagnosis.frozeTip": "Se congeló: el juego dejó de responder y la consola lo cerró al no poder pausarlo. Se instaló bien, así que el fallo viene de los propios archivos del juego, no de la descarga ni de ShadowMount. Otra descarga desde su página puede funcionar.",
+  "phone.links.title": "Enviar enlaces",
+  "phone.links.note": "Pega uno o varios enlaces: archivos, páginas de servidores o enlaces magnet. Las partes de un archivo (.part1.rar, .r00, .7z.001) son una sola descarga, por TorBox o AllDebrid si hay una clave.",
+  "phone.links.send": "Enviar a la consola",
+  "phone.links.added": "{count, plural, one {# descarga añadida en la consola.} other {# descargas añadidas en la consola.}}",
+  "phone.links.choice": "{count, plural, one {# enlace} other {# enlaces}}: ¿un archivo en partes?",
+  "phone.links.choiceNote": "Sus nombres no lo dicen. Si son las partes de un archivo, en el orden en que los pegaste, se descargan como uno.",
+  "phone.links.asParts": "Partes de un archivo",
+  "phone.links.asEach": "Descargas separadas"
 }

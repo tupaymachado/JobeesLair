@@ -1404,5 +1404,13 @@
   "phone.game.playersHere": "{started} sur {all} sur ton firmware",
   "whatsNew.players": "Ça démarre chez les autres ?",
   "whatsNew.playersDetail": "Les détails d'un jeu disent sur combien de consoles de joueurs il a démarré, et combien sur ton firmware.",
-  "diagnosis.frozeTip": "Il s'est figé : le jeu ne répondait plus, et la console l'a fermé faute de pouvoir le mettre en pause. Il s'est bien installé, donc le blocage vient des fichiers du jeu, pas du téléchargement ni de ShadowMount. Un autre téléchargement depuis sa page peut fonctionner."
+  "diagnosis.frozeTip": "Il s'est figé : le jeu ne répondait plus, et la console l'a fermé faute de pouvoir le mettre en pause. Il s'est bien installé, donc le blocage vient des fichiers du jeu, pas du téléchargement ni de ShadowMount. Un autre téléchargement depuis sa page peut fonctionner.",
+  "phone.links.title": "Envoyer des liens",
+  "phone.links.note": "Collez un ou plusieurs liens : fichiers, pages d'hébergeurs ou liens magnet. Les parties d'une archive (.part1.rar, .r00, .7z.001) forment un seul téléchargement, via TorBox ou AllDebrid si une clé est définie.",
+  "phone.links.send": "Envoyer à la console",
+  "phone.links.added": "{count, plural, one {# téléchargement ajouté sur la console.} other {# téléchargements ajoutés sur la console.}}",
+  "phone.links.choice": "{count, plural, one {# lien} other {# liens}} : un fichier en parties ?",
+  "phone.links.choiceNote": "Leurs noms ne le disent pas. Si ce sont les parties d'une archive, dans l'ordre collé, ils forment un seul téléchargement.",
+  "phone.links.asParts": "Parties d'un fichier",
+  "phone.links.asEach": "Téléchargements séparés"
 }

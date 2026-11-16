@@ -1404,5 +1404,13 @@
   "phone.game.playersHere": "あなたのファームウェアでは{all}台中{started}台",
   "whatsNew.players": "ほかの人の本体で起動する？",
   "whatsNew.playersDetail": "ゲームの詳細に、プレイヤーの本体何台で起動したか、あなたのファームウェアでは何台かが表示されます。",
-  "diagnosis.frozeTip": "フリーズしました。ゲームが応答しなくなり、一時停止できなかったため本体が終了させました。インストールは正常なので、原因はゲーム自体のファイルにあり、ダウンロードや ShadowMount ではありません。ゲームのページにある別のダウンロードなら動くかもしれません。"
+  "diagnosis.frozeTip": "フリーズしました。ゲームが応答しなくなり、一時停止できなかったため本体が終了させました。インストールは正常なので、原因はゲーム自体のファイルにあり、ダウンロードや ShadowMount ではありません。ゲームのページにある別のダウンロードなら動くかもしれません。",
+  "phone.links.title": "リンクを送る",
+  "phone.links.note": "リンクを1つまたは複数貼り付けてください：ファイル、ホストのページ、マグネットリンク。1つのアーカイブの分割ファイル（.part1.rar、.r00、.7z.001）は1つのダウンロードになり、キーがあれば TorBox や AllDebrid を通ります。",
+  "phone.links.send": "本体に送る",
+  "phone.links.added": "{count, plural, other {本体に#件のダウンロードを追加しました。}}",
+  "phone.links.choice": "{count, plural, other {#件のリンク}}：1つのファイルの分割ですか？",
+  "phone.links.choiceNote": "名前からは分かりません。貼り付けた順に1つのアーカイブの分割なら、1つのダウンロードになります。",
+  "phone.links.asParts": "1つのファイルの分割",
+  "phone.links.asEach": "別々のダウンロード"
 }

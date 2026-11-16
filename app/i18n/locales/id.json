@@ -1404,5 +1404,13 @@
   "phone.game.playersHere": "{started} dari {all} di firmware-mu",
   "whatsNew.players": "Jalan di konsol lain?",
   "whatsNew.playersDetail": "Detail sebuah game menunjukkan di berapa konsol pemain game itu berjalan, dan berapa di firmware-mu.",
-  "diagnosis.frozeTip": "Game ini macet: berhenti merespons, dan konsol menutupnya saat tidak bisa menjedanya. Pemasangannya benar, jadi macetnya berasal dari file game itu sendiri, bukan dari unduhan atau ShadowMount. Unduhan lain dari halamannya mungkin bisa berjalan."
+  "diagnosis.frozeTip": "Game ini macet: berhenti merespons, dan konsol menutupnya saat tidak bisa menjedanya. Pemasangannya benar, jadi macetnya berasal dari file game itu sendiri, bukan dari unduhan atau ShadowMount. Unduhan lain dari halamannya mungkin bisa berjalan.",
+  "phone.links.title": "Kirim tautan",
+  "phone.links.note": "Tempel satu atau beberapa tautan: file, halaman host, atau tautan magnet. Bagian-bagian satu arsip (.part1.rar, .r00, .7z.001) menjadi satu unduhan, lewat TorBox atau AllDebrid jika ada kunci.",
+  "phone.links.send": "Kirim ke konsol",
+  "phone.links.added": "{count, plural, other {# unduhan ditambahkan di konsol.}}",
+  "phone.links.choice": "{count, plural, other {# tautan}}: satu file dalam bagian?",
+  "phone.links.choiceNote": "Namanya tidak menunjukkannya. Jika itu bagian-bagian satu arsip, sesuai urutan tempel, akan menjadi satu unduhan.",
+  "phone.links.asParts": "Bagian dari satu file",
+  "phone.links.asEach": "Unduhan terpisah"
 }

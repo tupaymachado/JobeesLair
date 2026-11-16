@@ -1404,5 +1404,13 @@
   "phone.game.playersHere": "{started} su {all} sul tuo firmware",
   "whatsNew.players": "Si avvia agli altri?",
   "whatsNew.playersDetail": "I dettagli di un gioco dicono su quante console dei giocatori si è avviato, e su quante con il tuo firmware.",
-  "diagnosis.frozeTip": "Si è bloccato: il gioco ha smesso di rispondere e la console l'ha chiuso quando non è riuscita a metterlo in pausa. Si è installato correttamente, quindi il blocco viene dai file del gioco, non dal download né da ShadowMount. Un altro download dalla sua pagina potrebbe funzionare."
+  "diagnosis.frozeTip": "Si è bloccato: il gioco ha smesso di rispondere e la console l'ha chiuso quando non è riuscita a metterlo in pausa. Si è installato correttamente, quindi il blocco viene dai file del gioco, non dal download né da ShadowMount. Un altro download dalla sua pagina potrebbe funzionare.",
+  "phone.links.title": "Invia link",
+  "phone.links.note": "Incolla uno o più link: file, pagine di hosting o link magnet. Le parti di un archivio (.part1.rar, .r00, .7z.001) diventano un solo download, tramite TorBox o AllDebrid se è impostata una chiave.",
+  "phone.links.send": "Invia alla console",
+  "phone.links.added": "{count, plural, one {# download aggiunto sulla console.} other {# download aggiunti sulla console.}}",
+  "phone.links.choice": "{count, plural, one {# link} other {# link}}: un file in parti?",
+  "phone.links.choiceNote": "I nomi non lo dicono. Se sono le parti di un archivio, nell'ordine incollato, diventano un solo download.",
+  "phone.links.asParts": "Parti di un file",
+  "phone.links.asEach": "Download separati"
 }

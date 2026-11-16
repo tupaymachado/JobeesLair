@@ -50,6 +50,7 @@
 //   POST   /api/settings/update/check|install|restart   POST /api/settings/update/auto {"on": bool}
 //   POST   /api/queue/link {"id": "…", "url": "…"}   a download waiting on the browser takes this file link
 //   POST   /api/download {"id": "…", "source": n, "debrid": bool}   through the debrid service set up, or not
+//   POST   /api/links {"text": "…", "looseAs": "set"|"each"}   queues pasted links (as Downloads → Add links)
 // A game's sources say which a debrid service can take (`debrid`: its name), and a download waiting on the browser
 // gives its page (`page`), for the phone to open it itself. A game says what players saw when they started it (`players`).
 
@@ -180,7 +181,7 @@ import { finalError } from '../downloads/errors.js';
   // `debridOf(release)`: the debrid service's name when it can take that source, else null. `playersOf(titleId)`: what
   // players saw when they started it ({started, failed, here}, state/compat.js), or null.
   var SERVICES = ["torbox", "alldebrid"];
-  function createCompanionApi({ catalog, describe, download, queue, control, storage, feeds, remote, quick, info, homebrew = null, releasesOf = (game) => game.releases, logs = null, library = null, notes = () => [], notify = () => {}, typing = null, settings = null, debridOf = () => null, playersOf = () => null }) {
+  function createCompanionApi({ catalog, describe, download, links = null, queue, control, storage, feeds, remote, quick, info, homebrew = null, releasesOf = (game) => game.releases, logs = null, library = null, notes = () => [], notify = () => {}, typing = null, settings = null, debridOf = () => null, playersOf = () => null }) {
     const withSettings = (run) => {
       if (!settings) return failure(404, "Unknown request.");
       try {
@@ -371,6 +372,17 @@ import { finalError } from '../downloads/errors.js';
           return failure(409, error.message);
         }
       }),
+      // MODIFIED (tupay): links pasted on the phone, queued as Downloads → Add links does on the console.
+      "POST /api/links": (request) => {
+        const body = bodyOf(request);
+        if (!body || typeof body.text !== "string" || body.text.length > 6e4) return failure(400, "Send {\"text\": \"links…\", \"looseAs\": \"set\"|\"each\"}.");
+        if (!links) return failure(404, "Unknown request.");
+        try {
+          return json(200, links(body.text, { looseAs: typeof body.looseAs === "string" ? body.looseAs : null }));
+        } catch (error) {
+          return failure(409, error.message);
+        }
+      },
       "GET /api/typing": () => typing ? json(200, { asking: typing.asking() }) : failure(404, "Unknown request."),
       "POST /api/typing": (request) => {
         const body = bodyOf(request);

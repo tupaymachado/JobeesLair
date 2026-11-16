@@ -1404,5 +1404,13 @@
     "phone.game.playersHere": "{started} of {all} on your firmware",
     "whatsNew.players": "Does it start for others?",
     "whatsNew.playersDetail": "A game's Details say on how many players' consoles it started, and how many on your firmware.",
-    "diagnosis.frozeTip": "It froze: the game stopped responding, and the console closed it when it couldn't pause it. It installed correctly, so the freeze comes from the game's own files, not from the download or from ShadowMount. Another download of it from its page may run."
+    "diagnosis.frozeTip": "It froze: the game stopped responding, and the console closed it when it couldn't pause it. It installed correctly, so the freeze comes from the game's own files, not from the download or from ShadowMount. Another download of it from its page may run.",
+    "phone.links.title": "Send links",
+    "phone.links.note": "Paste one link or several: files, host pages or magnet links. The parts of one archive (.part1.rar, .r00, .7z.001) become one download, through TorBox or AllDebrid when a key is set.",
+    "phone.links.send": "Send to the console",
+    "phone.links.added": "{count, plural, one {# download added on the console.} other {# downloads added on the console.}}",
+    "phone.links.choice": "{count, plural, one {# link} other {# links}}: one file in parts?",
+    "phone.links.choiceNote": "Their names don't say. If they are the parts of one archive, in the order you pasted them, they download as one.",
+    "phone.links.asParts": "Parts of one file",
+    "phone.links.asEach": "Separate downloads"
 }

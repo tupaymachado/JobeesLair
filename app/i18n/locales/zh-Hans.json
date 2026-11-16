@@ -1404,5 +1404,13 @@
   "phone.game.playersHere": "你的固件上 {all} 台中 {started} 台",
   "whatsNew.players": "别人能启动吗？",
   "whatsNew.playersDetail": "游戏详情会显示它在多少台玩家主机上启动成功，以及在你的固件上有多少台。",
-  "diagnosis.frozeTip": "游戏卡住了：它停止响应，主机无法将其暂停，于是关闭了它。它安装正确，所以卡住的原因在游戏自身的文件，而不是下载或 ShadowMount。从它的页面换一个下载可能可以运行。"
+  "diagnosis.frozeTip": "游戏卡住了：它停止响应，主机无法将其暂停，于是关闭了它。它安装正确，所以卡住的原因在游戏自身的文件，而不是下载或 ShadowMount。从它的页面换一个下载可能可以运行。",
+  "phone.links.title": "发送链接",
+  "phone.links.note": "粘贴一个或多个链接：文件、网盘页面或磁力链接。同一压缩包的分卷（.part1.rar、.r00、.7z.001）合为一个下载；设置了密钥时通过 TorBox 或 AllDebrid。",
+  "phone.links.send": "发送到主机",
+  "phone.links.added": "{count, plural, other {已在主机上添加 # 个下载。}}",
+  "phone.links.choice": "{count, plural, other {# 个链接}}：是一个文件的分卷吗？",
+  "phone.links.choiceNote": "从名称看不出来。如果它们按粘贴顺序是同一压缩包的分卷，就合为一个下载。",
+  "phone.links.asParts": "一个文件的分卷",
+  "phone.links.asEach": "分别下载"
 }
