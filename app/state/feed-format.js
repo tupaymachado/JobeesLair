@@ -206,9 +206,8 @@ import { isMagnetLink, sourceKind, webURL } from './download-sources.js';
       platform: raw.platform === "ps4" || raw.platform === "ps5" ? raw.platform : id.startsWith("PPSA") ? "ps5" : "ps4",
       providers: [...new Set(releases.map((item) => isMagnetLink(item.url) ? "torrent" : hostName(item.url)))],
       direct: releases.some(direct),
-      // MODIFIED (tupay): for the Catalog and Compression filters (state/catalog.js).
+      // MODIFIED (tupay): for the Catalog filter (state/catalog.js); zstd and LZ4 come from the releases (state/formats.js).
       ...catalog ? { catalogs: [catalog.id] } : {},
-      compressions: [...new Set(releases.map((item) => item.compression).filter(Boolean))],
       developer: text(raw.developer, 120),
       publisher: text(raw.publisher, 120),
       releaseDate,

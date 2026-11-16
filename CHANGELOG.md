@@ -7,7 +7,9 @@ SHA-256 checksums.
 ## Unreleased
 
 - **Filter by catalog and by compression, as in Pegasus.** The store's filters open with **Catalog** (DLPSGame,
-  Pippo .exFAT, PFS, ZER0GAME, Orbit, BlackBox, Archive.org) and **Compression** (zstd, LZ4). The live catalog is
+  Pippo .exFAT, PFS, ZER0GAME, Orbit, BlackBox, Archive.org), and **Format** offers **zstd** and **LZ4** (a game
+  folder packed with them, as PFS publishes for 13.60; they count as 13.60 Ready). A filter with nothing to offer
+  is not shown. The live catalog is
   now one feed per Pegasus catalog, built on our server by `tools/catalog/catalog-feeds.mjs`
   (`https://files.tupay.dev.br/jl/`), so every link keeps where it is listed; the same link in two catalogs is
   one source with both. PFS is listed whole (every zstd and LZ4 link, Vikingfile ones too, for TorBox);

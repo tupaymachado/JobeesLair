@@ -43,6 +43,7 @@ import { PS4 } from './ps4.js';
     }
   };
   var readyHere = (game) => ready1360(game.formats ?? []) || Boolean(lowFirmware()) && game.platform === "ps5" && (game.formats ?? []).includes("fpkg");
+  var COMPRESSION_KINDS = ["zstd", "lz4"];
   var readyLabel = (text) => {
     const low = lowFirmware();
     return low ? text.replace("13.60", low) : text;
@@ -122,9 +123,8 @@ import { PS4 } from './ps4.js';
     if (known) {
       known.providers = [.../* @__PURE__ */ new Set([...known.providers ?? [], ...feedGame.providers])];
       if (feedGame.direct) known.direct = true;
-      // MODIFIED (tupay): the catalogs and compressions every feed adds (the Catalog and Compression filters).
+      // MODIFIED (tupay): the catalogs every feed adds (the Catalog filter).
       known.feedCatalogs = [.../* @__PURE__ */ new Set([...known.feedCatalogs ?? [], ...feedGame.catalogs ?? []])];
-      known.compressions = [.../* @__PURE__ */ new Set([...known.compressions ?? [], ...feedGame.compressions ?? []])];
     } else {
       const entry = { ...feedGame, feedPage: page, feedCatalogs: feedGame.catalogs ?? [] };
       games.push(entry);
@@ -149,12 +149,10 @@ import { PS4 } from './ps4.js';
     // The PS4 installs packages; the disk images and folders are the PS5's ShadowMount's.
     if (PS4) game.formats = game.formats.filter((kind) => kind === "fpkg");
   }
-  // MODIFIED (tupay): the catalogs that list each game (the bundled data's, then the feeds') and how its links are
-  // packed (the feeds say; the bundled data does not).
+  // MODIFIED (tupay): the catalogs that list each game (the bundled data's, then the feeds').
   for (const game of entries) {
     game.catalogs = [.../* @__PURE__ */ new Set([...bundledCatalogs[game.id]?.split(" ") ?? [], ...game.feedCatalogs ?? []])];
     delete game.feedCatalogs;
-    game.compressions ??= [];
   }
   var editionsByWork = /* @__PURE__ */ new Map();
   for (const game of entries) if (game.work) editionsByWork.set(game.work, [...editionsByWork.get(game.work) ?? [], game]);
@@ -291,7 +289,7 @@ import { PS4 } from './ps4.js';
       any: true,
       options: [
         { value: "ready", label: "release.compat.ready", name: "13.60 Ready" },
-        ...KINDS.filter((kind) => games.filter((game) => game.formats.includes(kind)).length >= MIN_KIND_GAMES).map((kind) => ({ value: kind, label: `release.type.${kind}`, name: kind }))
+        ...KINDS.filter((kind) => games.filter((game) => game.formats.includes(kind)).length >= MIN_KIND_GAMES).map((kind) => ({ value: kind, label: `release.type.${kind}`, name: COMPRESSION_KINDS.includes(kind) ? compressionName(kind) : kind }))
       ],
       has: (game, value) => value === "ready" ? readyHere(game) : game.formats.includes(value)
     },
@@ -317,19 +315,16 @@ import { PS4 } from './ps4.js';
     },
     { key: "provider", any: true, options: hosts, has: (game, value) => game.providers?.includes(value) }
   ];
-  // MODIFIED (tupay): the catalog a game is listed in (DLPS, Pippo, PFS ... state/catalogs.js), most games first, and
-  // how its links are packed (zstd, LZ4), right after Platform: the Pegasus way of choosing a provider.
+  // MODIFIED (tupay): the catalog a game is listed in (DLPS, Pippo, PFS ... state/catalogs.js), most games first, right
+  // after Platform: the Pegasus way of choosing a provider. (zstd and LZ4 are in Format.)
   var countBy = (key) => {
     const counts = /* @__PURE__ */ new Map();
     for (const game of games) for (const value of game[key]) counts.set(value, (counts.get(value) ?? 0) + 1);
     return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([value]) => value);
   };
-  FACETS.splice(
-    1,
-    0,
-    { key: "catalog", any: true, options: countBy("catalogs").map((value) => ({ value, name: catalogName(value) })), has: (game, value) => game.catalogs.includes(value) },
-    { key: "compression", any: true, options: countBy("compressions").map((value) => ({ value, name: compressionName(value) })), has: (game, value) => game.compressions.includes(value) }
-  );
+  FACETS.splice(1, 0, { key: "catalog", any: true, options: countBy("catalogs").map((value) => ({ value, name: catalogName(value) })), has: (game, value) => game.catalogs.includes(value) });
+  // A facet with nothing to offer (no feed loaded yet, say) is not shown: only its title would be.
+  for (let index = FACETS.length - 1; index >= 0; index--) if (!FACETS[index].options.length) FACETS.splice(index, 1);
   var facetTitle = (key) => t(`filters.facet.${key}`);
   function optionLabel(option) {
     if (!option.label) return option.name;

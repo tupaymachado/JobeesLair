@@ -27,7 +27,6 @@ test('a catalog feed tags its releases and games with its catalog, compression a
   assert.deepEqual(feed.catalog, { id: 'pfs', name: 'PFS Catalog' });
   const [{ game, releases }] = feed.games;
   assert.deepEqual(game.catalogs, ['pfs']);
-  assert.deepEqual(game.compressions, ['zstd', 'lz4']);
   assert.deepEqual(releases.map((r) => r.catalogs), [['pfs'], ['pfs'], ['pfs'], ['pfs']]);
   assert.deepEqual(releases.map((r) => r.compression ?? null), ['zstd', 'zstd', 'lz4', null], 'from the feed, else the label; nothing unknown');
   assert.equal(releases[0].details, 'Region: USA · Firmware: 10.xx+');
@@ -75,7 +74,7 @@ test('catalogs: data/catalogs.js is current with the bundled releases (run tools
   assert.equal(shipped, catalogsModule(buildCatalogs()));
 });
 
-test('the store filters by catalog and by compression, bundled games and feed games alike', async () => {
+test('the store filters by catalog and by zstd/LZ4 format, bundled games and feed games alike', async () => {
   const { CATALOG_FEEDS } = await import('../app/state/feeds.js');
   const url = CATALOG_FEEDS.find((item) => item.endsWith('/pfs.jlx'));
   const feed = parseFeed(pfsFeed(), url);
@@ -87,18 +86,22 @@ test('the store filters by catalog and by compression, bundled games and feed ga
   globalThis.__stubFiles = new Map([[`/download0/JobeesLair/feeds/${stableKey(url)}.json`, JSON.stringify({ url, hash: 'h', name: feed.name, games: feed.games.length, document })]]);
   const catalog = await import('../app/state/catalog.js');
   const facet = (key) => catalog.FACETS.find((item) => item.key === key);
-  assert.deepEqual(catalog.FACETS.slice(0, 3).map((item) => item.key), ['platform', 'catalog', 'compression']);
+  assert.deepEqual(catalog.FACETS.slice(0, 3).map((item) => item.key), ['platform', 'catalog', 'format']);
+  assert.ok(catalog.FACETS.every((item) => item.options.length), 'no facet without options');
   assert.ok(facet('catalog').options.some((option) => option.value === 'pfs' && option.name === 'PFS'));
-  assert.deepEqual(facet('compression').options.map((option) => option.value).sort(), ['lz4', 'zstd']);
+  // zstd and LZ4 are formats (a folder packed with them), and 13.60 ready. The test feed has one game of each:
+  // the facet offers a kind from MIN_KIND_GAMES (5) games, so they are checked through the filter itself.
+  const { gameFormats, ready1360 } = await import('../app/state/formats.js');
+  assert.deepEqual(gameFormats(feed.games[0].releases, 'ps5').filter((kind) => kind === 'zstd' || kind === 'lz4'), ['zstd', 'lz4']);
+  assert.equal(ready1360(['zstd']), true);
   const state = (filters) => ({ filters: { ...catalog.NO_FILTERS, ...filters }, query: '', wishlist: [] });
-  const zstd = catalog.filterGames(state({ compression: ['zstd'] })).map((game) => game.id).sort();
+  const zstd = catalog.filterGames(state({ format: ['zstd'] })).map((game) => game.id).sort();
   assert.deepEqual(zstd, ['PPSA01285', 'PPSA99001']);
   const pfs = catalog.filterGames(state({ catalog: ['pfs'] })).map((game) => game.id);
   assert.ok(pfs.includes('PPSA99001') && pfs.includes('PPSA01285'));
   assert.ok(!catalog.filterGames(state({ catalog: ['dlps'] })).some((game) => game.id === 'PPSA99001'), 'a PFS-only game is not DLPS');
   assert.ok(catalog.filterGames(state({ catalog: ['dlps'] })).length > 500, 'the bundled games carry their catalogs');
   assert.equal(catalog.facetLabel('catalog', 'pfs'), 'PFS');
-  assert.equal(catalog.facetLabel('compression', 'lz4'), 'LZ4');
   const plain = catalog.getGame('PPSA31246');
   assert.equal(plain.art.logo, 'https://image.api.playstation.com/x/l.png', 'a bundled game without a logo takes the feed\'s');
   assert.equal(plain.art.logoAspect, 2);

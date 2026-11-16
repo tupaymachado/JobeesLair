@@ -9,8 +9,10 @@
 
 import { releaseSets, withReleaseTypes } from './release-sets.js';
 
-  var KINDS = ["folder", "exfat", "ffpkg", "ffpfs", "image", "backport", "fpkg"];
-  var READY = /* @__PURE__ */ new Set(["folder", "exfat", "ffpkg", "ffpfs", "image"]);
+  // MODIFIED (tupay): zstd and LZ4, a game folder packed with them (state/feed-format.js `compression`): what the PFS
+  // catalog publishes for 13.60, unpacked to a folder ShadowMount+ mounts, so they count as ready too.
+  var KINDS = ["folder", "zstd", "lz4", "exfat", "ffpkg", "ffpfs", "image", "backport", "fpkg"];
+  var READY = /* @__PURE__ */ new Set(["folder", "zstd", "lz4", "exfat", "ffpkg", "ffpfs", "image"]);
   function kindOf(release) {
     if (release.dumpType === "image") return release.imageFormat || "image";
     return KINDS.includes(release.dumpType) ? release.dumpType : null;
@@ -18,6 +20,7 @@ import { releaseSets, withReleaseTypes } from './release-sets.js';
   // The kinds among `releases` (a game's raw release list), in KINDS order.
   function gameFormats(releases, platform) {
     const found = new Set(withReleaseTypes(releaseSets(releases), platform).map(kindOf).filter(Boolean));
+    for (const release of releases) if (release.compression && KINDS.includes(release.compression)) found.add(release.compression);
     return KINDS.filter((kind) => found.has(kind));
   }
   var ready1360 = (kinds) => kinds.some((kind) => READY.has(kind));
